@@ -1,0 +1,61 @@
+#!/bin/bash
+
+function usage() 
+{
+    echo "Usage: "
+    echo "  diffconf arg1 arg2"
+    echo "  diffconf -h"
+    echo ""
+    echo "  Shows differences between configuration options."
+    echo "  Both arguments have to be tarballs containing autoconf-enabled sources."
+    echo "  Shows diff between outputs of configure --help."
+    echo ""
+}
+
+function die()
+{
+    echo Error: ${1}
+    echo ""
+    usage
+    rm -rf ${TEMPDIR1} ${TEMPDIR2}
+    exit 1
+}
+
+TEMPDIR1=$(mktemp -d)
+TEMPDIR2=$(mktemp -d)
+
+# Check if there are two arguments (or -h)
+if [ $# -ne 2 ]; then
+    # -h is an exception
+    if [ $# -eq '1' -a $1 = '-h' ]; then
+        usage
+        rm -rf ${TEMPDIR1} ${TEMPDIR2}
+        exit 0
+    else
+        die "Script needs two arguments"
+    fi;
+fi;
+
+TAR1=${1}
+TAR2=${2}
+
+# Uncompress both
+tar xf ${TAR1} -C ${TEMPDIR1} --strip-components=1 || die "Decompression of ${TAR1} failed" 
+tar xf ${TAR2} -C ${TEMPDIR2} --strip-components=1 || die "Decompression of ${TAR2} failed" 
+
+# Check if there are configure scripts
+[ -x ${TEMPDIR1}/configure ] || die "${TAR1} does not contain valid configure script"
+[ -x ${TEMPDIR2}/configure ] || die "${TAR2} does not contain valid configure script"
+
+# Run configure scripts and remember output
+TEMPCONFOUT1=$(mktemp -p ${TEMPDIR1})
+TEMPCONFOUT2=$(mktemp -p ${TEMPDIR2})
+${TEMPDIR1}/configure --help | sed '1,/[Cc]onfiguration/d' > ${TEMPCONFOUT1}
+${TEMPDIR2}/configure --help | sed '1,/[Cc]onfiguration/d' > ${TEMPCONFOUT2}
+
+# Run diff on the output (if the differ)
+cmp -s ${TEMPCONFOUT1} ${TEMPCONFOUT2} || vimdiff -c "set nonu diffopt+=iwhite" ${TEMPCONFOUT1} ${TEMPCONFOUT2}
+
+# Delete TEMPDIRs
+rm -rf ${TEMPDIR1} ${TEMPDIR2} 
+
