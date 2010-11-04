@@ -1,0 +1,68 @@
+0. About
+--------
+spec.snippets is a collection of snippets for specfile editing Michael Sanders'
+snipMate [1] vim plugin.
+
+
+1. Install snipMate
+-------------------
+Either go to [1] and follow instructions or alternatively,
+if you use openSUSE, you can install the plugin from Contrib [2]
+repository - the package is called vim-plugin-snipmate [3].
+
+
+2. Install spec.snippets
+------------------------
+Copy or symlink the spec.snippets file to ~/.vim/snippets/spec.snippets.
+
+
+3. How to use it snipMate
+-------------------------
+Issue ":help snippet" command in vim to get snipMate documentation.
+
+
+4. About spec snippets
+----------------------
+spec.snippets contains number of snippets (short strings that expand - after
+<tab> key is pressed - to longer 'RPM code'. For example, if you need to
+add new subpackage to a specfile, type 'package' followed by a <tab> key. It
+will expand to the following:
+
+%package        PKGNAME
+License:        LICENSE
+Summary:        SUMMARY
+Group:          GROUP
+AutoReqProv:    on  
+
+%description    PKGNAME
+LONG DESCRIPTION
+
+The strings written in capitals are supposed to be customized. To quote
+snipMate documentation:
+
+	To go to the next item in the loop, simply <tab> over to it; if there is
+	repeated code, such as the "PKGNAME" in this example, you can simply
+	start typing once it's highlighted and all the matches specified in the
+	snippet will be updated. To go in reverse, use <shift-tab>.
+
+spec.snippets defines much more snippets. Just take a look into the file and
+see what it can do. Feel free to send me patches (or branch
+http://gitorious.org/opensuse/pack-tools) to add other useful spec snippets.
+
+5. Author
+---------
+Petr Uzel <petr.uzel@suse.cz>
+
+snipMate plugin is written by Michael Sanders - Thanks!
+
+
+6. Bugs, suggestions, patches
+-----------------------------
+Contact me via mail at <petr.uzel@suse.cz>, or on freenode IRC: ptr_uzl.
+
+
+
+
+[1] http://www.vim.org/scripts/script.php?script_id=2540
+[2] http://en.opensuse.org/openSUSE:Contrib
+[3] http://software.opensuse.org/search?q=vim-plugin-snipmate
