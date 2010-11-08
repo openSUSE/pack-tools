@@ -16,15 +16,21 @@ function opr() {
 ### Print the package name from current or parent dir
 function opk() {
 
-    #[ -r .osc/_package ] && printf "%s\n" $(< .osc/_package)
     _op "_package"
 
 }
 
 ### Print the project/pakage from current or parent dir
-### XXX: do not print '/' when not in prj/pkg directory
 function opp {
 
-    printf "%s/%s\n" $(opr) $(opk)
+    local _project _package
+    _project=$(opr)
+    _package=$(opk)
+
+    if [[ -n "${_project}" && -n "${_package}" ]]; then
+        printf "%s/%s\n" $(opr) $(opk)
+        return 0
+    fi
+    return 1
 
 }
