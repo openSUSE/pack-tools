@@ -35,6 +35,24 @@ function opp {
 
 }
 
+### Get a package name from linkinfo element
+### useful for mbranch, where package name don't conform to spec name
+
+function lopk() {
+
+    local _name
+
+    for i in '.' '../'; do
+        if [ -r "${i}/.osc/_files" ]; then
+           _name=$(grep linkinfo ${i}/.osc/_files | sed 's/.*package="\([a-zA-Z0-9_-]*\)".*/\1/')
+        fi
+    done
+    if [ -n "${_name}" ]; then
+        printf "%s\n" "${_name}"
+    fi
+    return 1
+}
+
 # return a name of special file
 # With second argument:
 #   check if the given file exists in cwd and echo it
@@ -75,10 +93,13 @@ function __get_special_file__() {
         *)
             if [ -r ".osc/_package" ]; then
                 _special_name=$(opk).${_special_ext}
-                [ -n "${_special_name}" ] && [ ! -r "${_special_name}" ] && {
+                if [ -n "${_special_name}" ] && [ ! -r "${_special_name}" ]; then
+                    _special_name=$(lopk).${_special_ext}
+                fi
+                if [ -n "${_special_name}" ] && [ ! -r "${_special_name}" ]; then
                     echo "get_${_special_ext}: error '${_special_name}' not exists, osc project is probably corrupted"
                     return 2
-                }
+                fi
             else
                 echo "Select spec to open"
                 select SPEC in ${_special_file}; do
@@ -86,6 +107,7 @@ function __get_special_file__() {
                 done
             fi
             echo "${_special_name}"
+            return 0
             ;;
     esac
     
