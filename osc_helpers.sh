@@ -1,3 +1,8 @@
+### Print output to the stderr
+function __error__()  {
+    printf "${@}" > /dev/stderr
+}
+
 ### Read .osc/$1 from current and previous dir
 function _op() {
     for i in '.' '../'; do
@@ -68,7 +73,7 @@ function __get_special_file__() {
     
     _special_ext=${1}
     [ -z "${_special_ext}" ] && {
-        echo "__get_special_file__: error, extension argument is mandatory"
+        __error__ "%s\n" "__get_special_file__: error, extension argument is mandatory"
         return 4
     }
     _special_name=${2%%.*}
@@ -83,7 +88,7 @@ function __get_special_file__() {
     
     case ${_c_special_file} in
         0)
-            echo "No ${_special_ext} found" > /dev/stderr
+            __error__ "%s\n" "No ${_special_ext} found"
             return 1
             ;;
         1)
@@ -97,11 +102,11 @@ function __get_special_file__() {
                     _special_name=$(lopk).${_special_ext}
                 fi
                 if [ -n "${_special_name}" ] && [ ! -r "${_special_name}" ]; then
-                    echo "get_${_special_ext}: error '${_special_name}' not exists, osc project is probably corrupted"
+                    __error__ "%s\n" "get_${_special_ext}: error '${_special_name}' not exists, osc project is probably corrupted"
                     return 2
                 fi
             else
-                echo "Select spec to open"
+                __error__ "%s\n" "Select spec to open"
                 select SPEC in ${_special_file}; do
                     _special_name=${SPEC}
                 done
@@ -111,7 +116,7 @@ function __get_special_file__() {
             ;;
     esac
     
-    echo "get_${_special_ext}: We should not reach this line"
+    __error__ "%s\n" "get_${_special_ext}: We should not reach this line"
     return 3
 }
 
