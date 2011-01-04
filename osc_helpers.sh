@@ -79,7 +79,7 @@ function __get_special_file__() {
     _special_name=${2%%.*}
     
     [ -n "${_special_name}" ] && [ -r "${_special_name}.${_special_ext}" ] && {
-        echo ${_spec_name}.${_special_ext}
+        echo ${_special_name}.${_special_ext}
         return 0
     }
     
