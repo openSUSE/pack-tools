@@ -144,7 +144,7 @@ else
   echo "$DIST distribution wasn't found."
   usage
 fi
-DIR=`echo $i | sed "s:SLE-\|-::g" | tr [A-Z] [a-z]`
+DIR=`echo $DIST | sed "s:SLE-\|-::g" | tr [A-Z] [a-z]`
 if [ ! -e $DIR ]; then
   mkdir $DIR;
 fi
