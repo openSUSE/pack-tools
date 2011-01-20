@@ -46,7 +46,7 @@ fi
 if [ "$DIST" == "all" -o "$DIST" == "devel" ]; then
   DEVEL_PRJ=`$osc meta pkg openSUSE:Factory $PACKAGE | grep devel | sed "s:.*project=\"*::" | sed "s:\".*::"`
   if [ "$DEVEL_PRJ" == "" ]; then
-    echo "Devel project couldn't be figured out."
+    echo "Devel project of package $PACKAGE couldn't be figured out."
     exit 1;
   fi
   echo ""
@@ -87,7 +87,7 @@ if [ "$DIST" == "all" -o "$DIST" == "obs" ]; then
   if [ "$DIST" == "obs" ]; then
     exit 0  # we are done here
   fi
-fi # packages from obs
+fi 
 
 # packages from ibs and sles9
 
@@ -111,15 +111,16 @@ if [ "$DIST" == "all" -o "$DIST" == "ibs" ]; then
     sed -i "s:\(Release.*\).<.*>:\1:" $PACKAGE/$PACKAGE.spec
     cd ..
   done
-  if [ "$DIST" == "ibs" ]; then
-    exit 0  # we are done here
-  fi
 
   # sles9
   echo ""
   echo "SUSE sles9"
   rm -r sles9-all/$PACKAGE
-  yapt getpac -E $PACKAGE sles9
+  yapt getpac --path="9/$PACKAGE" -E $PACKAGE sles9
+
+  if [ "$DIST" == "ibs" ]; then
+    exit 0  # we are done here
+  fi
 fi
 
 if [ $DIST == "all" ]; then
@@ -130,7 +131,7 @@ fi
 
 if [ "$DIST" == "sles9" ]; then
   rm -r sles9-all/$PACKAGE
-  yapt getpac -E $PACKAGE sles9
+  yapt getpac --path="9/$PACKAGE" -E $PACKAGE sles9
   exit 0
 fi
 
