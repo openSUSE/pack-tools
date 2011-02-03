@@ -1,0 +1,101 @@
+#!/usr/bin/python
+
+# is_maintained alternative command
+#
+
+from osc.core import *
+from osc.conf import *
+import sys
+
+# The search function in older osc releases (0.125) don't support attribute searching
+# this is code is from osc-0.131git
+def search2(apiurl, **kwargs):
+    """
+    Perform a search request. The requests are constructed as follows:
+    kwargs = {'kind1' => xpath1, 'kind2' => xpath2, ..., 'kindN' => xpathN}
+    GET /search/kind1?match=xpath1
+    ...
+    GET /search/kindN?match=xpathN
+    """
+    res = {}
+    for urlpath, xpath in kwargs.iteritems():
+        u = makeurl(apiurl, ['search', urlpath], ['match=%s' % quote_plus(xpath)])
+        f = http_GET(u)
+        res[urlpath] = ET.parse(f).getroot()
+    return res
+
+def maintained_xpath(package, attribute='OBS:Maintained'):
+    def _(**kwargs):
+        return "(@name = '%(package)s') and (project/attribute/@name='%(attribute)s' or attribute/@name='%(attribute)s')" % (kwargs)
+    return _(package=package, attribute=attribute)
+
+def get_apiurls():
+    return conf.config['api_host_options'].keys()
+
+def call_search(apiurl, package, attribute):
+    res = None
+    try:
+        res = search2(apiurl, package=maintained_xpath(package, attribute))
+    except urllib2.HTTPError, e:
+        print >>sys.stderr, e
+    return res
+
+def search_to_list(search_result):
+    #TODO: assert?
+    ret = list()
+    for kind, root in search_result.iteritems():
+        kind_map = {'published/binary/id': 'binary'}
+        for node in root.findall(kind_map.get(kind, kind)):
+            ret.append(tuple(
+                (node.get(name) for name in ('project', 'name'))))
+    return ret
+
+def print_search_results(res, search_for_package):
+    fmt = "%s/%s"
+    idx = 2
+    if not search_for_package:
+        fmt = "%s"
+        idx = 1
+
+    for line in res:
+        print(fmt % (line[:idx]))
+
+def is_maintained(package=""):
+
+    retval = 0
+    search_for_package = (package != "")
+    if not search_for_package:
+        package = "kernel-source" # we can expect kernel-source will be in every product
+
+    conf.get_config()
+    #XXX: anyone knows why this is not per-instance????
+    # - will be this usable? conf.config['maintained_update_project_attribute']
+    maintained_attribute = conf.config['maintained_attribute']
+
+    for apiurl in get_apiurls():
+
+        res = call_search(apiurl, package, maintained_attribute)
+        ret = search_to_list(res)
+
+        if not ret:
+            print >>sys.stderr, "No package %s found" % package
+            retval = 1
+        else:
+            print_search_results(ret, search_for_package)
+            retval = 0
+    return retval
+
+def usage():
+    print >>sys.stderr, "Usage: is_maintained [package]"
+    print >>sys.stderr, "Prints the list of maintained projects"
+    print >>sys.stderr, "If optional package argument is written, it prints the project/package"
+
+if len(sys.argv) > 1 and sys.argv[1] in ('-h', '--help', '-H', 'help', 'usage'):
+    usage()
+    sys.exit(1)
+
+package = ""
+if len(sys.argv) > 1:
+    package = sys.argv[1]
+sys.exit(is_maintained(package))
+
