@@ -1,5 +1,5 @@
 #!/bin/bash
-set -x
+#set -x
 
 USER=pgajdos
 isc="osc -A https://api.suse.de"
@@ -16,10 +16,10 @@ WIPE=$3
 
 function usage
 {
-  echo "Usage: $0 \$package [devel|all|ibs|obs|\$dist] [wipe]"
+  echo "Usage: $0 \$package [devel|all|ibs|obs|\$dist [wipe]]"
   echo ""
   echo "       \$dist: $ALL_PROJECTS sles9"
-  echo "              when no \$dist supplied, $DEFAULT_DIST is used"
+  echo "              when no second argument is supplied, $DEFAULT_DIST is used"
   echo "       wipe:  when specified, home:$USER:branches:*"
   echo "              will be erased before osc branch;"
   echo "              for devel and sles9 doesn't make sense (noop)"
@@ -44,22 +44,22 @@ fi
 # package from devel project
 
 if [ "$DIST" == "all" -o "$DIST" == "devel" ]; then
-  DEVEL_PRJ=`$osc meta pkg openSUSE:Factory $PACKAGE | grep devel | sed "s:.*project=\"*::" | sed "s:\".*::"`
+  DEVEL_PRJ=`$osc meta pkg openSUSE:Factory $PACKAGE | grep "devel project" | sed "s:.*project=\"*::" | sed "s:\".*::"`
   if [ "$DEVEL_PRJ" == "" ]; then
     echo "Devel project of package $PACKAGE couldn't be figured out."
-    exit 1;
-  fi
-  echo ""
-  echo "devel project: $DEVEL_PRJ"
-  if [ ! -e devel ]; then
-    mkdir devel;
-  fi
-  cd devel
-  rm -rf $PACKAGE
-  $osc co -c $DEVEL_PRJ $PACKAGE
-  cd ..
-  if [ "$DIST" == "devel" ]; then
-    exit 0  # we are done here
+  else
+    echo ""
+    echo "devel project: $DEVEL_PRJ"
+    if [ ! -e devel ]; then
+      mkdir devel;
+    fi
+    cd devel
+    rm -rf $PACKAGE
+    $osc co -c $DEVEL_PRJ $PACKAGE
+    cd ..
+    if [ "$DIST" == "devel" ]; then
+      exit 0  # we are done here
+    fi
   fi
 fi
 
@@ -80,6 +80,11 @@ if [ "$DIST" == "all" -o "$DIST" == "obs" ]; then
       $osc rdelete "home:$USER:branches:openSUSE:$i:Update:Test" $PACKAGE >/dev/null 2>&1
     fi
     COPROJECT=`$osc branch -m "maintanence update" "openSUSE:$i" $PACKAGE 2>&1 | grep "home:$USER:branches" | sed "s/.*\(home.*\)/\1/"`
+    if [ "$COPROJECT" == "" ]; then
+      echo "package not found"
+      cd ..
+      continue
+    fi
     $osc co -c $COPROJECT
     sed -i "s:\(Release.*\).<.*>:\1:" $PACKAGE/$PACKAGE.spec
     cd ..
@@ -107,6 +112,11 @@ if [ "$DIST" == "all" -o "$DIST" == "ibs" ]; then
       $isc rdelete "home:$USER:branches:SUSE:$i:Update:Test" $PACKAGE >/dev/null 2>&1
     fi
     COPROJECT=`$isc branch -m "maintanence update" "SUSE:$i:GA" $PACKAGE 2>&1 | grep "home:$USER:branches" | sed "s/.*\(home.*\)/\1/"`
+    if [ "$COPROJECT" == "" ]; then
+      echo "package not found"
+      cd ..
+      continue
+    fi
     $isc co -c $COPROJECT
     sed -i "s:\(Release.*\).<.*>:\1:" $PACKAGE/$PACKAGE.spec
     cd ..
@@ -115,7 +125,7 @@ if [ "$DIST" == "all" -o "$DIST" == "ibs" ]; then
   # sles9
   echo ""
   echo "SUSE sles9"
-  rm -r sles9-all/$PACKAGE
+  rm -r 9/$PACKAGE
   yapt getpac --path="9/$PACKAGE" -E $PACKAGE sles9
 
   if [ "$DIST" == "ibs" ]; then
