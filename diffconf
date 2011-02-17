@@ -12,6 +12,7 @@ function usage()
     echo ""
 }
 
+
 function die()
 {
     echo Error: ${1}
