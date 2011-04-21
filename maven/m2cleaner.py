@@ -1,6 +1,10 @@
 #!/usr/bin/python3
 import string, os
 
+from versioncomparator import VersionComparator
+
+vc = VersionComparator()
+
 pomfiles = os.popen('find ~/.m2/repository -name "*.pom"').readlines()
 # Remove trailing '\n'
 for index,file in enumerate(pomfiles):
@@ -22,8 +26,8 @@ def first_pass():
         try:
             [nopath,version_vers_file]=get_path_and_version(vers[path])
         except KeyError:
-            version_vers_file=''
-        if version_file > version_vers_file:
+            version_vers_file='0'
+        if vc.gt(version_file, version_vers_file):
             vers[path]=file
 
 # Second pass
