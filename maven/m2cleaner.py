@@ -5,10 +5,8 @@ from versioncomparator import VersionComparator
 
 vc = VersionComparator()
 
-pomfiles = os.popen('find ~/.m2/repository -name "*.pom"').readlines()
-# Remove trailing '\n'
-for index,file in enumerate(pomfiles):
-    pomfiles[index]=file.replace('\n','')
+# create a list of all pom files in maven repository without trailing \n
+pomfiles = [f[:-1] for f in os.popen('find ~/.m2/repository -name "*.pom"')]
 
 vers = { }
 
