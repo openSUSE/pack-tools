@@ -6,6 +6,7 @@
 from osc.core import *
 from osc.conf import *
 import sys
+import argparse
 
 # The search function in older osc releases (0.125) don't support attribute searching
 # this is code is from osc-0.131git
@@ -50,17 +51,19 @@ def search_to_list(search_result):
                 (node.get(name) for name in ('project', 'name'))))
     return ret
 
-def print_search_results(res, search_for_package):
+def print_search_results(res, search_for_package, apiurl):
     fmt = "%s/%s"
     idx = 2
     if not search_for_package:
         fmt = "%s"
         idx = 1
+    if apiurl:
+        fmt = ("%s;" % apiurl) + fmt
 
     for line in res:
         print(fmt % (line[:idx]))
 
-def is_maintained(package=""):
+def is_maintained(package="", show_apiurl=False):
 
     retval = 0
     search_for_package = (package != "")
@@ -81,21 +84,28 @@ def is_maintained(package=""):
             print >>sys.stderr, "No package %s found" % package
             retval = 1
         else:
-            print_search_results(ret, search_for_package)
+            print_apiurl = None
+            if show_apiurl:
+                print_apiurl = apiurl
+            print_search_results(ret, search_for_package, print_apiurl)
             retval = 0
     return retval
 
-def usage():
-    print >>sys.stderr, "Usage: is_maintained [package]"
-    print >>sys.stderr, "Prints the list of maintained projects"
-    print >>sys.stderr, "If optional package argument is written, it prints the project/package"
+def mk_parser():
+    parser = argparse.ArgumentParser(
+            usage="is_maintained [args] [package ...]",
+            description='Prints the list of maintained projects or packages')
+    parser.add_argument('package', metavar='package', type=str,
+                   help='an integer for the accumulator')
+    parser.add_argument('-A', '--apiurl',
+            dest='show_apiurl', action='store_true',
+            default=False, help='show apiurl')
+    return parser
 
-if len(sys.argv) > 1 and sys.argv[1] in ('-h', '--help', '-H', 'help', 'usage'):
-    usage()
-    sys.exit(1)
+def main():
+    parser = mk_parser()
+    args = parser.parse_args()
 
-package = ""
-if len(sys.argv) > 1:
-    package = sys.argv[1]
-sys.exit(is_maintained(package))
+    sys.exit(is_maintained(args.package, args.show_apiurl))
 
+main()
