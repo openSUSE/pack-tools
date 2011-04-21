@@ -42,7 +42,7 @@ class VersionComparator:
         """
         mod = "z"
         if self.cleanToString(version) != version:
-            mod = filter(None, self._getModifier.split(version))[0]
+            mod = list(filter(None, self._getModifier.split(version)))[0]
             modv = filter(None, self._cleanModifiers.split(version)[1:])
             if modv:
                 mod += ''.join(modv)
@@ -105,4 +105,4 @@ if __name__ == "__main__":
         ]
 
     for ver1, ver2 in versions:
-        print "Version", ver1, "is greater than", ver2 + ":", vc.gt(ver1, ver2)
+        print("Version %s is greater than %s : %s" % (ver1, ver2, vc.gt(ver1, ver2)))
