@@ -5,8 +5,8 @@ USER=pgajdos
 isc="osc -A https://api.suse.de"
 osc="osc -A https://api.opensuse.org"
 
-OSC_PROJECTS="11.2 11.3"
-ISC_PROJECTS="SLE-10-SP3 SLE-10-SP4 SLE-11-SP1"
+OSC_PROJECTS="11.3 11.4"
+ISC_PROJECTS="SLE-9-SP4 SLE-10-SP3 SLE-10-SP4 SLE-11-SP1 SLE-11-SP2"
 ALL_PROJECTS="$OSC_PROJECTS $ISC_PROJECTS"
 PACKAGE=$1
 DIST=$2
@@ -44,7 +44,7 @@ fi
 # package from devel project
 
 if [ "$DIST" == "all" -o "$DIST" == "devel" ]; then
-  DEVEL_PRJ=`$osc meta pkg openSUSE:Factory $PACKAGE | grep "devel project" | sed "s:.*project=\"*::" | sed "s:\".*::"`
+  DEVEL_PRJ=`$osc meta pkg openSUSE:Factory $PACKAGE | grep "<devel" | sed "s:.*project=\"*::" | sed "s:\".*::"`
   if [ "$DEVEL_PRJ" == "" ]; then
     echo "Devel project of package $PACKAGE couldn't be figured out."
   else
@@ -122,12 +122,6 @@ if [ "$DIST" == "all" -o "$DIST" == "ibs" ]; then
     cd ..
   done
 
-  # sles9
-  echo ""
-  echo "SUSE sles9"
-  rm -r 9/$PACKAGE
-  yapt getpac --path="9/$PACKAGE" -E $PACKAGE sles9
-
   if [ "$DIST" == "ibs" ]; then
     exit 0  # we are done here
   fi
@@ -138,12 +132,6 @@ if [ $DIST == "all" ]; then
 fi
 
 # particular distribution check out
-
-if [ "$DIST" == "sles9" ]; then
-  rm -r sles9-all/$PACKAGE
-  yapt getpac --path="9/$PACKAGE" -E $PACKAGE sles9
-  exit 0
-fi
 
 BS=""
 if [ "`echo $OSC_PROJECTS | grep $DIST`" != "" ]; then
@@ -167,6 +155,10 @@ if [ "$BS" == ibs ]; then
     $isc rdelete "home:$USER:branches:SUSE:$DIST:Update:Test" $PACKAGE >/dev/null 2>&1
   fi
   COPROJECT=`$isc branch -m "maintanence update" "SUSE:$DIST:GA" $PACKAGE 2>&1 | grep "home:$USER:branches" | sed "s/.*\(home.*\)/\1/"`
+  if [ "$COPROJECT" == "" ]; then
+    echo "package not found"
+    exit 1
+  fi
   $isc co -c $COPROJECT 
 else
   if [ "$WIPE" == "wipe" ]; then
@@ -175,6 +167,10 @@ else
     $osc rdelete "home:$USER:branches:openSUSE:$DIST:Update:Test" $PACKAGE >/dev/null 2>&1
   fi
   COPROJECT=`$osc branch -m "maintanence update" "openSUSE:$DIST" $PACKAGE 2>&1 | grep "home:$USER:branches" | sed "s/.*\(home.*\)/\1/"`
+  if [ "$COPROJECT" == "" ]; then
+    echo "package not found"
+    exit 1
+  fi
   $osc co -c $COPROJECT
 fi
 sed -i "s:\(Release.*\).<.*>:\1:" $PACKAGE/$PACKAGE.spec
