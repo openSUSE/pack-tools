@@ -10,19 +10,30 @@ ISC_PROJECTS="SLE-9-SP4 SLE-10-SP3 SLE-10-SP4 SLE-11-SP1 SLE-11-SP2"
 ALL_PROJECTS="$OSC_PROJECTS $ISC_PROJECTS"
 PACKAGE=$1
 DIST=$2
-DEFAULT_DIST="devel"
+DEVEL_DIST="devel"
+DEFAULT_DIST="$DEVEL_DIST"
 WIPE=$3
-
+OSC_DISTDIRS=$OSC_PROJECTS
+ISC_DISTDIRS=`echo $ISC_PROJECTS | sed "s:SLE-\|-::g" | tr [A-Z] [a-z]`
+DISTDIRS="$DEVEL_DIST $OSC_DISTDIRS $ISC_DISTDIRS"
+IN_DISTDIR="no"
 
 function usage
 {
-  echo "Usage: $0 \$package [devel|all|ibs|obs|\$dist [wipe]]"
+  echo "Usage: $0 \$package [all|ibs|obs|\$dist [wipe]]"
   echo ""
-  echo "       \$dist: $ALL_PROJECTS sles9"
-  echo "              when no second argument is supplied, $DEFAULT_DIST is used"
+  echo "       \$dist: $DISTDIRS"
+  echo "              package is saved into \$dist/\$package;"
+  echo "              when no second argument is supplied: "
+  echo "              - when you are in some of dist subdirectory"
+  echo "                ($DISTDIRS) "
+  echo "                name of this subdirectory is used for \$dist"
+  echo "                and package is saved into ./\$package;"
+  echo "              - otherwise $DEVEL_DIST is used for \$dist"
+  echo "                and package is saved into devel/$package"
   echo "       wipe:  when specified, home:$USER:branches:*"
   echo "              will be erased before osc branch;"
-  echo "              for devel and sles9 doesn't make sense (noop)"
+  echo "              for $DEVEL_DIST doesn't make sense (noop)"
   exit 1
 }
 
@@ -33,7 +44,18 @@ if [ "$PACKAGE" == "" ]; then
 fi
 
 if [ "$DIST" == "" ]; then
-  DIST="$DEFAULT_DIST"
+  CURDIR=`echo $PWD | sed "s:^.*/::"`
+  if [ "`echo $DISTDIRS | grep $CURDIR`" != "" ]; then
+    DIST="$CURDIR"
+    IN_DISTDIR="yes"
+  else
+    DIST="$DEFAULT_DIST"
+  fi
+fi
+
+# 11sp1 --> SLE-11-SP1
+if [ "`echo $ISC_DISTDIRS | grep $DIST`" != "" ]; then
+  DIST=`echo $DIST | tr [a-z] [A-Z] | sed "s:\(^[0-9]\+\):SLE-\1-:" | sed "s:-$::"`
 fi
 
 if [ "$WIPE" != "" -a "$WIPE" != "wipe" ]; then
@@ -41,23 +63,25 @@ if [ "$WIPE" != "" -a "$WIPE" != "wipe" ]; then
   usage
 fi
 
-# package from devel project
+# package from $DEVEL_DIST project
 
-if [ "$DIST" == "all" -o "$DIST" == "devel" ]; then
+if [ "$DIST" == "all" -o "$DIST" == "$DEVEL_DIST" ]; then
   DEVEL_PRJ=`$osc meta pkg openSUSE:Factory $PACKAGE | grep "<devel" | sed "s:.*project=\"*::" | sed "s:\".*::"`
   if [ "$DEVEL_PRJ" == "" ]; then
     echo "Devel project of package $PACKAGE couldn't be figured out."
   else
     echo ""
     echo "devel project: $DEVEL_PRJ"
-    if [ ! -e devel ]; then
-      mkdir devel;
+    if [ "$IN_DISTDIR" == "no" ]; then
+      if [ ! -e $DEVEL_DIST ]; then
+        mkdir $DEVEL_DIST;
+      fi
+      cd $DEVEL_DIST
     fi
-    cd devel
     rm -rf $PACKAGE
     $osc co -c $DEVEL_PRJ $PACKAGE
     cd ..
-    if [ "$DIST" == "devel" ]; then
+    if [ "$DIST" == "$DEVEL_DIST" ]; then
       exit 0  # we are done here
     fi
   fi
@@ -75,9 +99,9 @@ if [ "$DIST" == "all" -o "$DIST" == "obs" ]; then
     cd $i
     rm -rf $PACKAGE
     if [ "$WIPE" == "wipe" ]; then
-      $osc rdelete "home:$USER:branches:openSUSE:$i" $PACKAGE >/dev/null 2>&1
-      $osc rdelete "home:$USER:branches:openSUSE:$i:Update" $PACKAGE >/dev/null 2>&1
-      $osc rdelete "home:$USER:branches:openSUSE:$i:Update:Test" $PACKAGE >/dev/null 2>&1
+      $osc rdelete -m "delete" "home:$USER:branches:openSUSE:$i" $PACKAGE >/dev/null 2>&1
+      $osc rdelete -m "delete" "home:$USER:branches:openSUSE:$i:Update" $PACKAGE >/dev/null 2>&1
+      $osc rdelete -m "delete" "home:$USER:branches:openSUSE:$i:Update:Test" $PACKAGE >/dev/null 2>&1
     fi
     COPROJECT=`$osc branch -m "maintanence update" "openSUSE:$i" $PACKAGE 2>&1 | grep "home:$USER:branches" | sed "s/.*\(home.*\)/\1/"`
     if [ "$COPROJECT" == "" ]; then
@@ -94,22 +118,22 @@ if [ "$DIST" == "all" -o "$DIST" == "obs" ]; then
   fi
 fi 
 
-# packages from ibs and sles9
+# packages from ibs
 
 if [ "$DIST" == "all" -o "$DIST" == "ibs" ]; then
   for i in $ISC_PROJECTS; do
-    DIR=`echo $i | sed "s:SLE-\|-::g" | tr [A-Z] [a-z]`
+    DISTDIR=`echo $i | sed "s:SLE-\|-::g" | tr [A-Z] [a-z]`
     echo ""
-    echo "SUSE $DIR"
-    if [ ! -e $DIR ]; then
-      mkdir $DIR;
+    echo "SUSE $DISTDIR"
+    if [ ! -e $DISTDIR ]; then
+      mkdir $DISTDIR;
     fi
-    cd $DIR
+    cd $DISTDIR
     rm -rf $PACKAGE
     if [ "$WIPE" == "wipe" ]; then
-      $isc rdelete "home:$USER:branches:SUSE:$i:GA" $PACKAGE >/dev/null 2>&1
-      $isc rdelete "home:$USER:branches:SUSE:$i:Update" $PACKAGE >/dev/null 2>&1
-      $isc rdelete "home:$USER:branches:SUSE:$i:Update:Test" $PACKAGE >/dev/null 2>&1
+      $isc rdelete -m "delete" "home:$USER:branches:SUSE:$i:GA" $PACKAGE >/dev/null 2>&1
+      $isc rdelete -m "delete" "home:$USER:branches:SUSE:$i:Update" $PACKAGE >/dev/null 2>&1
+      $isc rdelete -m "delete" "home:$USER:branches:SUSE:$i:Update:Test" $PACKAGE >/dev/null 2>&1
     fi
     COPROJECT=`$isc branch -m "maintanence update" "SUSE:$i:GA" $PACKAGE 2>&1 | grep "home:$USER:branches" | sed "s/.*\(home.*\)/\1/"`
     if [ "$COPROJECT" == "" ]; then
@@ -142,17 +166,19 @@ else
   echo "$DIST distribution wasn't found."
   usage
 fi
-DIR=`echo $DIST | sed "s:SLE-\|-::g" | tr [A-Z] [a-z]`
-if [ ! -e $DIR ]; then
-  mkdir $DIR;
+if [ "$IN_DISTDIR" == "no" ]; then
+  DISTDIR=`echo $DIST | sed "s:SLE-\|-::g" | tr [A-Z] [a-z]`
+  if [ ! -e $DISTDIR ]; then
+    mkdir $DISTDIR;
+  fi
+  cd $DISTDIR
 fi
-cd $DIR
 rm -rf $PACKAGE
 if [ "$BS" == ibs ]; then
   if [ "$WIPE" == "wipe" ]; then
-    $isc rdelete "home:$USER:branches:SUSE:$DIST:GA" $PACKAGE >/dev/null 2>&1
-    $isc rdelete "home:$USER:branches:SUSE:$DIST:Update" $PACKAGE >/dev/null 2>&1
-    $isc rdelete "home:$USER:branches:SUSE:$DIST:Update:Test" $PACKAGE >/dev/null 2>&1
+    $isc rdelete -m "delete" "home:$USER:branches:SUSE:$DIST:GA" $PACKAGE >/dev/null 2>&1
+    $isc rdelete -m "delete" "home:$USER:branches:SUSE:$DIST:Update" $PACKAGE >/dev/null 2>&1
+    $isc rdelete -m "delete" "home:$USER:branches:SUSE:$DIST:Update:Test" $PACKAGE >/dev/null 2>&1
   fi
   COPROJECT=`$isc branch -m "maintanence update" "SUSE:$DIST:GA" $PACKAGE 2>&1 | grep "home:$USER:branches" | sed "s/.*\(home.*\)/\1/"`
   if [ "$COPROJECT" == "" ]; then
@@ -162,9 +188,9 @@ if [ "$BS" == ibs ]; then
   $isc co -c $COPROJECT 
 else
   if [ "$WIPE" == "wipe" ]; then
-    $osc rdelete "home:$USER:branches:openSUSE:$DIST" $PACKAGE >/dev/null 2>&1
-    $osc rdelete "home:$USER:branches:openSUSE:$DIST:Update" $PACKAGE >/dev/null 2>&1
-    $osc rdelete "home:$USER:branches:openSUSE:$DIST:Update:Test" $PACKAGE >/dev/null 2>&1
+    $osc rdelete -m "delete" "home:$USER:branches:openSUSE:$DIST" $PACKAGE >/dev/null 2>&1
+    $osc rdelete -m "delete" "home:$USER:branches:openSUSE:$DIST:Update" $PACKAGE >/dev/null 2>&1
+    $osc rdelete -m "delete" "home:$USER:branches:openSUSE:$DIST:Update:Test" $PACKAGE >/dev/null 2>&1
   fi
   COPROJECT=`$osc branch -m "maintanence update" "openSUSE:$DIST" $PACKAGE 2>&1 | grep "home:$USER:branches" | sed "s/.*\(home.*\)/\1/"`
   if [ "$COPROJECT" == "" ]; then
