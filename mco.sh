@@ -5,9 +5,8 @@ USER=pgajdos
 isc="osc -A https://api.suse.de"
 osc="osc -A https://api.opensuse.org"
 DEVEL_DIST="devel"
-DEFAULT_DIST="$DEVEL_DIST"
 OSC_PROJECTS="$DEVEL_DIST 11.3 11.4 12.1"
-ISC_PROJECTS="SLE-9-SP4 SLE-10-SP3 SLE-10-SP4 SLE-11-SP1 SLE-11-SP2"
+ISC_PROJECTS="SLE-9-SP4 SLE-10-SP4 SLE-11-SP1 SLE-11-SP2"
 
 ALL_PROJECTS="$OSC_PROJECTS $ISC_PROJECTS"
 OSC_DISTDIRS=$OSC_PROJECTS
@@ -26,8 +25,8 @@ function usage
   echo "                ($ALL_DISTDIRS) "
   echo "                name of this subdirectory is used for \$dist"
   echo "                and package is saved into ./\$package;"
-  echo "              - otherwise $DEFAULT_DIST is used for \$dist"
-  echo "                and package is saved into $DEFAULT_DIST/\$package"
+  echo "              - otherwise $DEVEL_DIST is used for \$dist"
+  echo "                and therefore package is saved into $DEVEL_DIST/\$package"
   echo "       wipe:  when specified, home:$USER:branches:*"
   echo "              will be erased before osc branch;"
   echo "              for $DEVEL_DIST doesn't make sense (noop)"
@@ -65,7 +64,7 @@ if [ "$DIST" == "" ]; then
     DIST="$CURDIR"
     IN_DISTDIR="yes"
   else
-    DIST="$DEFAULT_DIST"  # default DIST
+    DIST="$DEVEL_DIST"  # default DIST
   fi
 fi
 
@@ -83,35 +82,16 @@ echo "Distribution(s):  [$DIST]"
 echo "Wipe:             [$WIPE]"
 
 # intended to wipe packages from home:$USER:branches:*
-# !!! wipe used to behave the same way for openSUSE and SLE versions;
-#     I hope it will do also in the future:
-#     $CMD rdelete --recursive -m "delete" "$PRJ:$PACKAGE"
-#     where $CMD \in {$ibs, $obs} (replaces TYPE) will be enough then
 function wipe()
 {
-  TYPE=$1
-  DIST=$2
+  CMD=$1
+  PRJ=$2
 
   if [ $WIPE -eq 1 ]; then
-    if [ "$TYPE" == "ibs" ]; then
-      echo "Wiping home:$USER:branches:SUSE:$DIST[:GA|[[:Update]:Test]]/$PACKAGE"
-      $isc rdelete -m "delete" "home:$USER:branches:SUSE:$DIST:GA" $PACKAGE >/dev/null 2>&1
-      $isc rdelete -m "delete" "home:$USER:branches:SUSE:$DIST:Update" $PACKAGE >/dev/null 2>&1
-      $isc rdelete -m "delete" "home:$USER:branches:SUSE:$DIST:Update:Test" $PACKAGE >/dev/null 2>&1
-    else
-      echo "Wiping home:$USER:branches:OBS_Maintained:$PACKAGE/$PACKAGE.openSUSE_$DIST"
-#      $osc rdelete -m "delete" "home:$USER:branches:OBS_Maintained:$PACKAGE/$PACKAGE.openSUSE_$DIST >/dev/null 2>&1"
-      echo "* This will not work for current osc mbranch. It could be ok when osc mbranch for one distribution package"
-      echo "* will be implemented. Then it could be possible to mbranch/remove packages independently. Now it works this way:"
-      echo "*   pgajdos@laura:~/pokus> osc mbranch dosfstools"
-      echo "*   Project home:pgajdos:branches:OBS_Maintained:dosfstools created."
-      echo "*   pgajdos@laura:~/pokus> osc rdelete -m "delete" home:pgajdos:branches:OBS_Maintained:dosfstools/dosfstools.openSUSE_11.4"
-      echo "*   pgajdos@laura:~/pokus> osc mbranch dosfstools"
-      echo "*   BuildService API error: branch target package already exists: home:pgajdos:branches:OBS_Maintained:dosfstools/dosfstools.openSUSE_11.3"
-      echo
-      echo 'Invoke manually $osc rdelete --recursive -m "delete" "home:$USER:branches:OBS_Maintained:$PACKAGE'
-      echo to remove all packages from home:$USER:branches:OBS_Maintained:$PACKAGE.
-    fi
+    echo "Wiping $PRJ[[:Update]:Test]/$PACKAGE"
+    $CMD rdelete -m "delete" "$PRJ" $PACKAGE >/dev/null 2>&1
+    $CMD rdelete -m "delete" "$PRJ:Update" $PACKAGE >/dev/null 2>&1
+    $CMD rdelete -m "delete" "$PRJ:Update:Test" $PACKAGE >/dev/null 2>&1
   fi
 }
 
@@ -140,33 +120,19 @@ function get_package()
       ;;
 
     "obs")
-      wipe $TYPE $DIST
-      COPROJECT="home:$USER:branches:OBS_Maintained:$PACKAGE/$PACKAGE.openSUSE_$DIST"
+      wipe "$osc" "home:$USER:branches:openSUSE:$DIST"
+      COPROJECT=`$osc branch -m "maintanence update" "openSUSE:$DIST" $PACKAGE 2>&1 | grep "home:$USER:branches" | sed "s/.*\(home.*\)/\1/"`
       echo
       echo "openSUSE:$DIST ($COPROJECT)"
-      if [ $OBS_MBRANCHED -eq 0 ]; then
-        RESULT=`$osc mbranch $PACKAGE 2>&1`
-        if [ $? -ne 0 ]; then
-          if [ "`echo $RESULT | grep 'branch target package already exists'`" != "" ]; then
-            # no action here
-            true
-          elif [ "`echo $RESULT | grep 'no packages found'`" != "" ]; then
-            echo "ERROR: package not found"
-            return # terminate get_package(), but not terminate whole download script
-          else
-            echo "ERROR: unknown osc MBRANCH message ($RESULT)"
-            echo "$0 needs to be fixed to handle it"
-            exit 1
-          fi
-        fi
+      if [ "$COPROJECT" == "" ]; then
+        echo "ERROR: package not found"
+        return
       fi
-      OBS_MBRANCHED=1
       $osc co -c $COPROJECT
-      mv "$PACKAGE.openSUSE_$DIST" $PACKAGE
       ;;
 
     "ibs")
-      wipe $TYPE $DIST
+      wipe "$isc" "home:$USER:branches:SUSE:$DIST"
       COPROJECT=`$isc branch -m "maintanence update" "SUSE:$DIST:GA" $PACKAGE 2>&1 | grep "home:$USER:branches" | sed "s/.*\(home.*\)/\1/"`
       echo
       echo "SUSE:$DIST ($COPROJECT)"
@@ -180,7 +146,7 @@ function get_package()
   sed -i "s:\(Release.*\).<.*>:\1:" $PACKAGE/$PACKAGE.spec
 }
 
-OBS_MBRANCHED=0
+
 for d in $DIST; do
   if [ "$d" == "$DEVEL_DIST" ]; then
     TYPE="devel"
