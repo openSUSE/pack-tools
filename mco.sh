@@ -121,7 +121,6 @@ function get_package()
 
     "obs")
       wipe "$osc" "home:$USER:branches:openSUSE:$DIST"
-      osc ls openSUSE:$DIST:Update:Test $PACKAGE 2>&1 >/dev/null
       COPROJECT=`$osc branch -m "maintanence update" "openSUSE:$DIST:Update:Test" $PACKAGE 2>&1 | grep "home:$USER:branches" | sed "s/.*\(home.*\)/\1/"`
       echo
       echo "openSUSE:$DIST ($COPROJECT)"
