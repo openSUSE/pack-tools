@@ -231,23 +231,23 @@ fi
 diff_changes
 
 # remove only if there are no other changes
-if [ -z "$diff" ]; then
-  echo -n "[[[[ Really remove $prj/$pkg? (yes/NO): "
-  read yesno
-  if [ "$yesno" != "yes" ]; then
-    echo "[[[[ Aborting."
-    exit 0
-  fi
-
-  $osc rdelete -m "$message" "$prj/$pkg"
-  if [ $? -ne 0 ]; then
-    echo "[[[[ ERROR: Command $osc rdelete -m \"$message\" $prj/$pkg failed."
-    exit 2
-  fi
-else
+if [ ! -z "$diff" ]; then
   echo "[[[[ WARNING: $prj/$pkg and $new_prj/$new_pkg are different, not removing."
   echo "[[[[          $prj/$pkg could have been modified in the meantime. Changes:"
   echo "$diff"
+fi
+
+echo -n "[[[[ Really remove $prj/$pkg? (yes/NO): "
+read yesno
+if [ "$yesno" != "yes" ]; then
+  echo "[[[[ Aborting."
+  exit 0
+fi
+
+$osc rdelete -m "$message" "$prj/$pkg"
+if [ $? -ne 0 ]; then
+  echo "[[[[ ERROR: Command $osc rdelete -m \"$message\" $prj/$pkg failed."
+  exit 2
 fi
 
 echo "[[ Finished."
