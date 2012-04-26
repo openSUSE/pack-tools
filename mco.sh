@@ -4,9 +4,14 @@
 USER=pgajdos
 isc="osc -A https://api.suse.de"
 osc="osc -A https://api.opensuse.org"
+
+BRANCH_PROJECT="home:pgajdos:maintenance"
+
 DEVEL_DIST="devel"
-OSC_PROJECTS="$DEVEL_DIST 11.3 11.4 12.1"
-ISC_PROJECTS="SLE-9-SP4 SLE-10-SP4 SLE-11-SP1 SLE-11-SP2"
+OSC_PROJECTS="$DEVEL_DIST 11.4 12.1"
+ISC_PROJECTS="SLE-9-SP3 SLE-10-SP3 SLE-11 SLE-11-SP2"
+OBS_BRANCHED=0
+IBS_BRANCHED=0
 
 ALL_PROJECTS="$OSC_PROJECTS $ISC_PROJECTS"
 OSC_DISTDIRS=$OSC_PROJECTS
@@ -16,7 +21,7 @@ ALL_DIST_ARGUMENTS="all obs ibs $ALL_DISTDIRS"
 
 function usage
 {
-  echo "Usage: $0 \$package [all|ibs|obs|\$dist] [wipe]"
+  echo "Usage: $0 \$package [all|ibs|obs|\$dist]"
   echo ""
   echo "       \$dist: $ALL_DISTDIRS"
   echo "              package is saved into \$dist/\$package;"
@@ -27,9 +32,6 @@ function usage
   echo "                and package is saved into ./\$package;"
   echo "              - otherwise $DEVEL_DIST is used for \$dist"
   echo "                and therefore package is saved into $DEVEL_DIST/\$package"
-  echo "       wipe:  when specified, home:$USER:branches:*"
-  echo "              will be erased before osc branch;"
-  echo "              for $DEVEL_DIST doesn't make sense (noop)"
   exit 1
 }
 
@@ -41,13 +43,10 @@ fi
 
 PACKAGE=$1
 DIST=""
-WIPE=0
 shift
 while (( "$#" )); do
   if [ "`echo $ALL_DIST_ARGUMENTS | grep -i $1`" ]; then
     DIST=`echo $1 | tr [A-Z] [a-z]`
-  elif [ "$1" == wipe ]; then
-    WIPE=1
   else
     echo "ERROR: Wrong argument ($1)."
     usage
@@ -79,21 +78,6 @@ DIST=`echo $DIST | sed "s:all:$ALL_PROJECTS:" | sed "s:ibs:$ISC_PROJECTS:" | sed
 echo
 echo "Package:          [$PACKAGE]"
 echo "Distribution(s):  [$DIST]"
-echo "Wipe:             [$WIPE]"
-
-# intended to wipe packages from home:$USER:branches:*
-function wipe()
-{
-  CMD=$1
-  PRJ=$2
-
-  if [ $WIPE -eq 1 ]; then
-    echo "Wiping $PRJ[[:Update]:Test]/$PACKAGE"
-    $CMD rdelete -m "delete" "$PRJ" $PACKAGE >/dev/null 2>&1
-    $CMD rdelete -m "delete" "$PRJ:Update" $PACKAGE >/dev/null 2>&1
-    $CMD rdelete -m "delete" "$PRJ:Update:Test" $PACKAGE >/dev/null 2>&1
-  fi
-}
 
 # download package and save in current dir
 function get_package()
@@ -120,32 +104,83 @@ function get_package()
       ;;
 
     "obs")
-      wipe "$osc" "home:$USER:branches:openSUSE:$DIST"
-      COPROJECT=`$osc branch -m "maintanence update" "openSUSE:$DIST:Update:Test" $PACKAGE 2>&1 | grep "home:$USER:branches" | sed "s/.*\(home.*\)/\1/"`
+      COPROJECT="$BRANCH_PROJECT:$PACKAGE"
+      COPACKAGE=`$osc ls  "$COPROJECT" | grep "_${DIST}_"`
       echo
-      echo "openSUSE:$DIST ($COPROJECT)"
-      if [ "$COPROJECT" == "" ]; then
+      echo "openSUSE:$DIST ($COPROJECT/$COPACKAGE)"
+      if [ "$COPACKAGE" == "" ]; then
         echo "ERROR: package not found"
         return
       fi
-      $osc co -c $COPROJECT
+      $osc co -c $COPROJECT $COPACKAGE
+      mv $COPACKAGE $PACKAGE
       ;;
 
     "ibs")
-      wipe "$isc" "home:$USER:branches:SUSE:$DIST"
-      COPROJECT=`$isc branch -m "maintanence update" "SUSE:$DIST:GA" $PACKAGE 2>&1 | grep "home:$USER:branches" | sed "s/.*\(home.*\)/\1/"`
+      COPROJECT="$BRANCH_PROJECT:$PACKAGE"
+      COPACKAGE=`$isc ls  "$COPROJECT" | grep "_${DIST}_"` # _xx_ needed: SLE-11, SLE-11-SP2
       echo
-      echo "SUSE:$DIST ($COPROJECT)"
-      if [ "$COPROJECT" == "" ]; then
+      echo "SUSE:$DIST ($COPROJECT/$COPACKAGE)"
+      if [ "$COPACKAGE" == "" ]; then
         echo "ERROR: package not found"
         return
       fi
-      $isc co -c $COPROJECT
+      $isc co -c $COPROJECT $COPACKAGE
+      mv $COPACKAGE $PACKAGE
       ;;
   esac
   sed -i "s:\(Release.*\).<.*>:\1:" $PACKAGE/$PACKAGE.spec
 }
 
+function mbranch()
+{
+  TYPE=$1
+  rm -rf .osc
+  PRJ="$BRANCH_PROJECT:$PACKAGE"
+  if [ $TYPE == 'obs' ]; then
+    if [ $OBS_BRANCHED -eq 0 ]; then
+      $osc ls $PRJ > /dev/null
+      prjnotexist=$?
+      yesno='no'
+      if [ $prjnotexist -eq 0 ]; then
+        echo "OBS project $PRJ exists yet."
+        echo -n "Delete it and branch again? (no will reuse existing project) [yes/NO]: "
+        read yesno
+        if [ "x$yesno" == "xyes" ]; then
+          echo "Deleting OBS project $PRJ."
+          $osc rdelete -m 'delete' --recursive "$PRJ" > /dev/null 2>&1
+        fi
+      fi
+      if [ $prjnotexist -eq 1 -o "x$yesno" == "xyes" ]; then
+        echo "Branching OBS packages ($PRJ)."
+        $osc mbranch $PACKAGE "$PRJ"
+      fi
+      OBS_BRANCHED=1
+      echo
+    fi
+  elif [ $TYPE == 'ibs' ]; then
+    if [ $IBS_BRANCHED -eq 0 ]; then
+      $isc ls $PRJ > /dev/null 2>&1
+      prjnotexist=$?
+      yesno='no'
+      if [ $prjnotexist -eq 0 ]; then
+        echo "IBS project $PRJ exists yet."
+        echo -n "Delete it and branch again? (no will reuse existing project) [yes/NO]: "
+        read yesno
+        if [ "x$yesno" == "xyes" ]; then
+          echo "Deleting IBS project $PRJ."
+          $isc rdelete -m 'delete' --recursive "$PRJ" > /dev/null 2>&1
+        fi
+      fi
+      if [ $prjnotexist -eq 1 -o "x$yesno" == "xyes" ]; then
+        echo "Branching IBS packages ($PRJ)."
+        $isc mbranch $PACKAGE "$PRJ"
+      fi
+      IBS_BRANCHED=1
+      echo
+    fi
+  fi
+}
 
 for d in $DIST; do
   if [ "$d" == "$DEVEL_DIST" ]; then
@@ -166,6 +201,7 @@ for d in $DIST; do
     cd $DISTDIR
   fi
 
+  mbranch $TYPE
   get_package $d $TYPE
 
   if [ "$IN_DISTDIR" == "no" ]; then
