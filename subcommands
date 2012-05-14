@@ -1,0 +1,7 @@
+fastre/prep/unpack/u:unpack sources, build quilt series and apply patches
+cleaner/c:tries to find out-of-date projects and report that
+spec/s:specfile management - get/set tags, merge conflicting specfile, add patch
+getpac/gp/get:download packages for all or only some products, delete unwanted before checkout
+patchinfo/p:fixed patchinfo, opens editor every time
+waitforbuild/wfb/w:wait for build, checks build results in loop
+rsr:recursive submit request - first submit to devel project and if everything goes well, submit to factory

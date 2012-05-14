@@ -1,0 +1,393 @@
+#!/bin/bash
+#newpac by dlovasko@suse.com
+
+#set -x
+
+#print usage
+function usage
+{
+	echo "getpac - script for advanced package downloading"
+	echo "usage: getpac PACKAGE [--opensuse PATTERN] [--suse PATTERN] [--delete PATTERN] [--delete PATTERN2] ..."
+}
+
+#delete all temporary files
+function cleanup
+{
+	test -e "$_delete_patterns" && rm -f "$_delete_patterns"
+	
+	test -e "$_opensuse_patterns" && rm -f "$_opensuse_patterns"
+	test -e "$_opensuse_mbranch" && rm -f "$_opensuse_mbranch"
+	test -e "$_opensuse_packages" && rm -f "$_opensuse_packages"
+	test -e "$_opensuse_wanted" && rm -f "$_opensuse_wanted"
+	test -e "$_opensuse_to_delete" && rm -f "$_opensuse_to_delete"
+	test -e "$_opensuse_files" && rm -f "$_opensuse_files"
+	test -e "$_opensuse_dirs" && rm -f "$_opensuse_dirs"
+
+	test -e "$_suse_patterns" && rm -f "$_suse_patterns"
+	test -e "$_suse_mbranch" && rm -f "$_suse_mbranch"
+	test -e "$_suse_packages" && rm -f "$_suse_packages"
+	test -e "$_suse_wanted" && rm -f "$_suse_wanted"
+	test -e "$_suse_to_delete" && rm -f "$_suse_to_delete"
+	test -e "$_suse_files" && rm -f "$_suse_files"
+	test -e "$_suse_dirs" && rm -f "$_suse_dirs"
+
+	test -e "$_factory_branch" && rm -f "$_factory_branch"
+	test -e "$_factory_to_delete" && rm -f "$_factory_to_delete"
+	test -e "$_factory_files" && rm -f "$_factory_files"
+}
+
+#when the script ends, run cleanup
+trap cleanup EXIT
+
+#parse arguments
+ARGS="$(/usr/bin/getopt -a -o f --long factory -o s: --long suse: -o o: --long opensuse: -o d: --long delete: -o h --long 'help' -- "${@}")"
+eval set -- ${ARGS}
+
+#no arguments (only -- produced by getopt)
+if [ "$#" = "1" ] ; then
+	usage
+	exit 1
+fi
+
+#files for storing argument information
+_delete_patterns=$(mktemp --dry-run)
+_suse_patterns=$(mktemp --dry-run)
+_opensuse_patterns=$(mktemp --dry-run)
+
+
+#by default, no factory
+factory=no
+
+#branch all opensuse and all suse packages if only package name supplied
+if [ $# = "2" ] #contains package name and '--' 
+then
+	echo "all" > $_opensuse_patterns
+	echo "all" > $_suse_patterns
+	factory=no
+fi
+
+#parse arguments
+while [ -n "${1}" ]; do
+		case "${1}" in
+			-d|--delete)
+				echo "$2" >> $_delete_patterns
+				shift 2
+			;;
+			-o|--opensuse)
+				echo "$2" >> $_opensuse_patterns
+				shift 2
+			;;
+			-s|--suse)
+				echo "$2" >> $_suse_patterns
+				shift 2
+			;;
+			-f|--factory)
+				factory=yes
+				shift 1
+			;;
+			--)
+				shift 1
+			;;
+			*)
+				break
+			;;
+		esac
+done
+
+#the only left is package name
+package_name="$1"
+echo "Downloading package $package_name."
+
+function opensuse
+{
+	#if there was at least one -o option
+	if [ -e $_opensuse_patterns ] 
+	then
+		echo ''
+		echo "openSUSE"
+		echo '****************'
+		#do the mbranch
+		_opensuse_mbranch=$(mktemp)
+		osc -A https://api.opensuse.org mbranch "$package_name" > $_opensuse_mbranch 2>&1
+
+		#parse output of mbranch
+		#if the package already exists, get the existing project name and continue
+		if grep -q '^BuildService API error: branch target package already exists:' $_opensuse_mbranch
+		then
+			project_name=`cat $_opensuse_mbranch | sed 's/^BuildService API error: branch target package already exists: //' | sed 's@/.*$@@'`
+
+		#or the package name is unknown
+		elif [ "`cat $_opensuse_mbranch`" = "BuildService API error: no packages found by search criteria" ]
+		then
+			echo "package not found"
+			return 1
+
+		#or everything was ok and continue
+		elif grep -q 'created.$' $_opensuse_mbranch
+		then
+			project_name="`sed  -e 's/^Project //' -e 's/ created.$//' $_opensuse_mbranch`"
+
+		else
+			echo "unknown situation, exiting"
+			return 1
+		fi
+
+		echo "Project name is $project_name."
+
+		_opensuse_packages=$(mktemp)
+		_opensuse_wanted=$(mktemp)
+		
+		#list all available packages inside project
+		osc -A https://api.opensuse.org list "$project_name" > $_opensuse_packages
+
+		#check if "all"
+		if [ "all" = "`cat $_opensuse_patterns`" ]
+		then
+			#all are wanted
+			cat $_opensuse_packages > $_opensuse_wanted
+		else
+			#grep only wanted
+			grep -f $_opensuse_patterns $_opensuse_packages > $_opensuse_wanted
+		fi
+
+		#accept packages ending only with _Update
+		sed -i -n -r /\(_Update$\|^patchinfo$\)/p $_opensuse_wanted
+
+		echo "Packages that satisfy your filter:"
+		cat $_opensuse_wanted
+
+		_opensuse_files=$(mktemp)
+		_opensuse_to_delete=$(mktemp)
+		
+		#for each package, delete unwanted files and download remaining files
+		while read line
+		do
+			#if there are any delete patterns
+			if [ -e $_delete_patterns ]
+			then
+				#populate package files
+				osc -A https://api.opensuse.org list -u "$project_name" "$line" > $_opensuse_files
+				
+				#pick files to delete
+				grep -f $_delete_patterns $_opensuse_files > $_opensuse_to_delete
+
+				#delete remotly
+				osc -A https://api.opensuse.org rremove -f "$project_name" "$line" `tr '\n' ' ' < $_opensuse_to_delete`
+			fi
+			osc -A https://api.opensuse.org checkout "$project_name" "$line" 
+		done < $_opensuse_wanted
+
+		#if already exists, adapt
+		_opensuse_dirs=$(mktemp)
+		if [ ! -e "$package_name" ]
+		then
+			#rename main directory
+			mv "$project_name" "$package_name"
+			
+			#obtain subdirectories
+			ls "$package_name" > $_opensuse_dirs
+		else
+			#obtain subdirectories
+			ls "$project_name" > $_opensuse_dirs
+		fi
+		
+		#from every name remove the package name and opensuse text
+		while read name
+		do
+			test "$name" = "patchinfo" && continue
+			newname=$(echo "$name" | sed -e "s/$package_name.openSUSE_//" -e "s/_Update$//")
+			
+			if [ -e "$project_name" ]
+			then
+				test -e "$package_name/$newname" && rm -rf "$package_name/$newname"
+				mv "$project_name/$name" "$package_name/$newname"
+			else
+				mv "$package_name/$name" "$package_name/$newname"
+			fi
+		done < $_opensuse_dirs
+
+		test -e $project_name && rm -rf $project_name
+	fi
+}
+
+###############################################################################
+
+function suse
+{
+	#if there was at least one -s option
+	if [ -e $_suse_patterns ] 
+	then
+		echo ''
+		echo "SUSE_SLE"
+		echo '****************'
+
+		#do the mbranch
+		_suse_mbranch=$(mktemp)
+		osc -A https://api.suse.de mbranch "$package_name" > $_suse_mbranch 2>&1
+
+		#parse output of mbranch
+		#if the package already exists, get the existing project name and continue
+		if grep -q '^BuildService API error: branch target package already exists:' $_suse_mbranch
+		then
+			project_name=`cat $_suse_mbranch | sed 's/^BuildService API error: branch target package already exists: //' | sed 's@/.*$@@'`
+
+		#or the package name is unknown
+		elif [ "`cat $_suse_mbranch`" = "BuildService API error: no packages found by search criteria" ]
+		then
+			echo "package not found"
+			return 1
+
+		#or everything was ok and continue
+		elif grep -q 'created.$' $_suse_mbranch
+		then
+			project_name="`sed  -e 's/^Project //' -e 's/ created.$//' $_suse_mbranch`"
+
+		else
+			echo "unknown situation, exiting"
+			return 1
+		fi
+
+		echo "Project name is $project_name."
+
+		_suse_packages=$(mktemp)
+		_suse_wanted=$(mktemp)
+		
+		#list all available packages inside project
+		osc -A https://api.suse.de list "$project_name" > $_suse_packages
+
+		#check if "all"
+		if [ "all" = "`cat $_suse_patterns`" ]
+		then
+			#all are wanted
+			cat $_suse_packages > $_suse_wanted
+		else
+			#grep only wanted
+			grep -f $_suse_patterns $_suse_packages > $_suse_wanted
+		fi
+
+		#accept packages ending only with _Update_Test
+		sed -i -n -r /\(_Update_Test$\|^patchinfo$\)/p $_suse_wanted
+
+		echo "Packages that satisfy your filter:"
+		cat $_suse_wanted
+
+		_suse_files=$(mktemp)
+		_suse_to_delete=$(mktemp)
+		
+		#for each package, delete unwanted files and download remaining files
+		while read line
+		do
+			#if there are any delete patterns
+			if [ -e $_delete_patterns ]
+			then
+				#populate package files
+				osc -A https://api.suse.de list -u "$project_name" "$line" > $_suse_files
+				
+				#pick files to delete
+				grep -f $_delete_patterns $_suse_files > $_suse_to_delete
+
+				#delete remotly
+				osc -A https://api.suse.de rremove -f "$project_name" "$line" `tr '\n' ' ' < $_suse_to_delete`
+			fi
+			osc -A https://api.suse.de checkout "$project_name" "$line" 
+		done < $_suse_wanted
+
+		#if already exists, adapt
+		_suse_dirs=$(mktemp)
+		if [ ! -e "$package_name" ]
+		then
+			#rename main directory
+			mv "$project_name" "$package_name"
+			
+			#obtain subdirectories
+			ls "$package_name" > $_suse_dirs
+		else
+			#obtain subdirectories
+			ls "$project_name" > $_suse_dirs
+		fi
+		
+		#from every name remove the package name and suse text
+		while read name
+		do
+			newname=$(echo "$name" | sed -e "s/$package_name.SUSE_SLE-/sle_/" -e "s/_Update_Test$//" | tr '[A-Z]' '[a-z]')
+			
+			if [ -e "$project_name" ]
+			then
+				test -e "$package_name/$newname" && rm -rf "$package_name/$newname"
+				mv "$project_name/$name" "$package_name/$newname"
+			else
+				mv "$package_name/$name" "$package_name/$newname"
+			fi
+		done < $_suse_dirs
+
+		test -e $project_name && rm -rf $project_name
+	fi
+}
+
+###############################################################################
+
+function factory
+{
+	#if there was option -f = we need to download also openSUSE:Factory release
+	if [ "$factory" = "yes" ]
+	then
+		echo ''
+		echo "openSUSE:Factory"
+		echo '****************'
+
+		#try to branch project from openSUSE:Factory - this will link to actual devel package
+		_factory_branch=$(mktemp)
+		osc -A https://api.opensuse.org branch "openSUSE:Factory" "$package_name" &> $_factory_branch
+		retcode=$?
+
+		#obtain project name
+		if [ "$retcode" = "0" ]
+		then
+			project_name=$(cat $_factory_branch | tail -n 1 | sed 's/^.* home:/home:/' | sed 's@/'"$package_name"'$@@')
+		else
+			if grep -q 'branch target package already exists' $_factory_branch
+			then
+				project_name=$(cat $_factory_branch | tail -n 1 | sed 's/^.* home:/home:/' | sed 's@/'"$package_name"'$@@')
+			else
+				echo "unknown error, exiting"
+				return 1
+			fi
+		fi
+		
+		echo "Project name is $project_name."
+		
+		#get file list
+		_factory_files=$(mktemp)
+		_factory_to_delete=$(mktemp)
+		
+		if [ -e $_delete_patterns ]
+		then
+			#get file list of files to delete
+			osc -A https://api.opensuse.org list -u "$project_name" "$package_name" > $_factory_files
+			grep -f $_delete_patterns $_factory_files > $_factory_to_delete
+
+			#remotely delete them
+			osc -A https://api.opensuse.org rremove -f "$project_name" "$package_name" `tr '\n' ' ' < $_factory_to_delete`
+		fi
+
+		#after that, checkout/download only wanted
+		osc -A https://api.opensuse.org checkout "$project_name" "$package_name"
+		
+		#directory layout
+		if [ -e "$package_name" ]
+		then
+			test -e "$package_name/Factory" && rm -rf "$package_name/Factory"
+			mv "$project_name/$package_name" "$package_name/Factory"
+		else
+			mkdir "$package_name"
+			mv "$project_name/$package_name" "$package_name/Factory"
+		fi
+
+		test -e "$project_name" && rm -rf "$project_name"
+	fi
+}
+
+opensuse
+suse
+factory
+

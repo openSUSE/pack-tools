@@ -1,0 +1,82 @@
+#!/bin/bash
+#fast package unpacking & quilt series creation by dlovasko@suse.com
+
+#un/comment for debug/release
+set -x
+
+#check if we are in osc directory
+if [ ! -e .osc ]
+then
+	echo "you need to run this command inside osc directory"
+	exit 1
+fi
+
+gzip_define="__gzip function takefirst { basename \"\$2\" ; } ; takefirst"
+
+#parse commandline arguments
+if [ "$#" = 0 ] 
+then
+	#if no arguments, try to guess the 
+	spec=`cat .osc/_package | sed 's/\..*//'`.spec
+else
+	#check for help crave
+	if [ "$1" = "-h" -o "$1" = "--help" ]
+	then
+		echo "prep subcommand: fast package unpacking & quilt series creation"
+		echo "usage: pgg prep [-h] [specfile]"
+		exit 1
+	fi
+
+	if [ "$1" = "-g" -o "$1" = "--gzip-normal" ]
+	then
+		gzip_define="__gzip gzip"
+		shift
+	fi
+	
+	#assume it is path of specfile
+	spec="$1"
+fi
+
+#check if prep contains quilt operations
+if sed -n '/^%prep/,/^$/p' $spec | grep -q quilt
+then
+	echo "warninig: your prep script is doing something nasty with quilt. this will probably break this script. continue? (y/n)"
+	read answer
+	if [ $answer != 'y' ]
+	then
+		exit 1
+	fi
+fi
+
+#run rpmbuild
+##only prep phase -bp
+##do not check for dependencies(since there is no actual building process)
+##locate sources in cwd
+##extract in tmp dir
+##every patchname is written to a series file
+##gzipped patches are processed nearly the same, except the rpmbuild is always appending the -dc option, so we skip it with inline takefirst function
+##in the prep_post phase - quilt setup seriesfile && quilt push -a
+##if succesful - copy back
+
+salt=`tr -dc A-Za-z0-9_ < /dev/urandom | head -c 8`
+
+builddir=$(mktemp -d)
+echo $gzip_define
+rpmbuild \
+  --define="_sourcedir `pwd`" \
+  --define="_builddir $builddir" \
+  --define="__cat basename" \
+  --define="$gzip_define" \
+  --define="__patch xargs echo >> series_tmp_$salt" \
+  --define="__spec_prep_post test -e series_tmp_$salt && cat series_tmp_$salt | sed  s/-s// | sed s/--fuzz=.// | tr -s ' ' | awk 'BEGIN {FS=OFS=\" \"} {temp=\$1; \$1=\$2; \$2=temp} {print}' > pkg_series_$salt && quilt setup --fuzz=0 \$PWD/pkg_series_$salt ; rm -f series_tmp_$salt ; test -e pkg_series_$salt && quilt push -a ; ln -s -f pkg_series_$salt series ; exit 0 " \
+  -bp \
+  --nodeps \
+  $spec
+
+#if rpmbuild was succesful - echo positive message
+if [ "$?" = "0" ] 
+then
+	mv $builddir/* .
+	rm -r $builddir
+	echo "unpack succesful"
+fi

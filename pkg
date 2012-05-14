@@ -1,0 +1,81 @@
+#!/bin/bash
+#pkg - master command by dlovasko@suse.com
+
+#un/comment for debug/release
+#set -x
+
+#check for 0 args, then print help
+if [ "$#" = "0" ] 
+then
+	echo "master command for packaging utilities"
+	echo "try pkg --list for list of subcommands"
+	exit 1
+fi
+
+#run thru all the args, find first one which is subcommand
+for i in `seq $#`
+do
+	#if grep -q -- "${!i}" ~/.config/pkg/subcommands
+	if echo ${!i} | grep -qv '^-'
+	then
+		subcommand=${!i}
+		#echo "$subcommand"
+		break
+	fi
+done
+
+#i now contains index in $@ of subcommand
+let k=i-1
+verbose=no
+
+#save arguments for subcommand
+if [ -n "$subcommand" ] 
+then
+	subargs=${@:$i:$#}
+else
+	let k=i
+fi
+#echo $subargs
+
+#prepare arguments
+eval set -- `getopt -a -o v --long verbose -o l --long list  -- "${@:1:$k}"`
+
+#process arguments for master command
+while [ -n "$1" ]
+do
+	case $1 in
+		-v|--verbose)
+			verbose=yes
+			shift
+		;;
+		-l|--list)
+			echo "pkg subcommand list:"
+			cat ~/.pkg/subcommands | sed -e 's/:/ - /' -e 's/^/  /'
+			exit 1
+		;;
+		--)
+			break
+		;;
+	esac
+done
+
+#check if any subcommand
+
+#echo "'$subargs'"
+if [ -z "$subargs" ] 
+then 
+	exit 0
+fi
+
+#check if the subcommand exists
+if cat ~/.pkg/subcommands | cut -d: -f1 | grep -q -e '\(^\|/\)'$subcommand'\($\|/\)'
+then
+	#run the subcommand
+	sh ~/.pkg/$subargs
+else
+	echo "subcommand '$subcommand' does not exist"
+	echo "try pkg --list for list of subcommands" 
+	exit 1
+fi
+
+

@@ -1,0 +1,209 @@
+#!/bin/bash
+#wait for build
+#script periodically checks if all build results succeeded, with respect of timeout and other results(failed & unresolvable)
+
+#un/comment for debug/release
+#set -x
+
+#check all results of build in actual directory
+function check_dir()
+{
+	#get results from osc, 5. column contains status message
+	#exclude excluded status and merge repeating into one
+	_results=$(mktemp)
+	osc r --csv "$archopt$repoopt" | cut -d '|' -f 5 | grep -v excluded | grep -v disabled |  sort -u > $_results
+	
+	cat $_results
+	
+	#check for lines containing failed or unresolvable
+	if  grep -q failed $_results ; then
+		return 2
+	fi
+
+	if  grep -q unresolvable $_results ; then
+		return 3
+	fi
+
+	#check for succeeded as the last one, always
+	if  grep -q succeeded $_results ; then
+		if [ "`cat $_results | wc -l`" = "1" ]
+		then
+			return 0
+		fi
+	fi
+
+	#otherwise building...
+	return 1
+}
+
+#prints basic information about this script
+function wfb_usage()
+{
+	echo "Usage: waitforbuild.sh [-i|--interval SECONDS] [-l|--loops NUM] [-a|--arch=ARCH_1] ... [-a|--arch=ARCH_N] [-r|--repo=REPO_1] ... [-r|--repo=REPO_N] [path] [path2 ...]"
+	echo "or as function do_waitforbuild (+ same argument list)"
+	echo ""
+	echo "Periodically check all paths for build status - exit after all succeeded OR exit with fail after time out"
+	echo "Default values: loop count = 60; interval = 10 seconds; directory = ."
+	echo "Return codes: 0 = succeeded; 1 = time out; 2 = failed; 3 = unresolvable"
+}
+
+#periodically check for build status
+function do_waitforbuild()
+{
+	_loops=60;
+	_interval=10
+
+	#if there are no parameters
+	if [ -z "${1}" ]; then
+		#check if cwd is a valid osc directory
+		if [ -e "./.osc/_package" ]; then
+			#add cwd to arguments
+			eval set -- '.'
+		else
+			#just print usage and exit
+			wfb_usage
+			exit 1
+		fi
+	fi
+
+	#parsing arguments(i, l, a, r - with parameters; h)	
+	ARGS="$(/usr/bin/getopt -a -o i: --long interval: -o l: --long loops: -o a: --long arch: -o r: --long repo: -o h --long 'help' -- "${@}")"
+	eval set -- ${ARGS}
+	
+	while [ -n "${1}" ]; do
+	case "${1}" in
+	        -i|--interval)
+			_interval="${2}"
+			shift 2
+		;;
+
+		-l|--loops)
+			_loops="${2}"
+			shift 2
+		;;
+		
+		-a|--arch)
+			#add to archs array
+			archs[$[${#archs[@]}+1]]="${2}";
+			shift 2		
+		;;
+		
+		-r|--repo)	
+			#add to repos array
+			repos[$[${#repos[@]}+1]]="${2}"
+			shift 2
+		;;
+
+		-h|--help)
+			wfb_usage
+			exit 1
+		;;
+
+		--)
+			shift 1
+		;;	
+
+		*)
+			break
+		;;
+	esac
+	done
+
+
+	#after archs and repos are full, populate them into archopt and repoopt for osc results as arguments
+	archopt=""
+	repoopt=""
+		
+	for a in "${archs[@]}"
+	do
+		#concat actual archopt + '-a' + iterator
+		archopt=$archopt' -a '$a
+	done	
+	
+	for r in "${repos[@]}"
+	do
+		#same as with archopt
+		repoopt=$repoopt' -r '$r
+	done
+
+
+	#if no directories where set, make cwd the default one
+	if [ -z "${1}" ] ; then
+		eval set -- '.'
+	fi
+	
+	#fill status array with false values, check if all arguments are directories
+	declare -A STATUS
+	while [ -n "${1}" ]; do
+		if [ ! -d "${1}" ]; then
+		        echo "WARNING: ${1} does not exists, skipping"
+			shift 1
+		        continue
+		fi
+      
+		#check of valid directory
+		if [ ! -e "${1}/.osc/_project" ]; then
+			echo "WARNING: ${1}/.osc/_project does not exist, skipping"
+			shift 1
+			continue
+		fi
+
+		#check of valid directory
+		if [ ! -e "${1}/.osc/_package" ]; then
+			echo "WARNING: ${1}/.osc/_package does not exist, skipping"
+			shift 1
+			continue
+		fi
+
+		STATUS[${1}]=false
+		shift 1
+	done
+	
+	#repeat _loops times, if still not done, time out
+	for (( i=1; i<= _loops ; i++ ))
+	do
+		ALL_SUCCEEDED=false
+		for KEY in ${!STATUS[@]}; do
+			# skip dirs with succesfull status
+			if ${STATUS[${KEY}]}; then
+				ALL_SUCCEEDED=true
+				continue
+			fi
+	
+			#if build inside dir is successful, flag is set to true
+			#else flag is set to false & break out of cycle
+			pushd ${KEY} &>/dev/null
+			if check_dir; then  
+				STATUS[${KEY}]=true
+				ALL_SUCCEEDED=true
+		        else
+				#check return value from check_dir, if 2 or 3 = exit with appropriate return code
+				if [ "$?" = "2" ]; then
+					echo "error: some package has failed"
+					return 2;
+				fi
+				if [ "$?" = "3" ]; then
+					echo "error: some package is unresolvable"
+					return 3;
+				fi
+				ALL_SUCCEEDED=false;
+				break;
+		        fi
+			popd &>/dev/null
+		done
+
+		if $ALL_SUCCEEDED ; then
+			echo "success: all done";
+			return 0;
+		fi
+
+		sleep $_interval;
+	done
+
+	echo "error: time out";
+	return 1;
+}
+
+do_waitforbuild $@
+
+
