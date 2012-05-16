@@ -47,6 +47,7 @@ verbose=no
 #save arguments for subcommand
 if [ -n "$subcommand" ] 
 then
+#FIXME: this breaks escaped arguments - like 'foo "x y"' will end in two arguments 'x' and 'y'
 	subargs=${@:$i:$#}
 else
 	let k=i
@@ -85,10 +86,18 @@ fi
 
 #check if the subcommand exists
 curpath=$(readlink -f $0)
+prefix=${curpath%/*}
 
-if [[ $curpath =~ ^/usr ]]
-then 
-	test -e "/usr/lib/pack-tools/commands/$subcommand" && sh /usr/lib/pack-tools/commands/$subargs
+if [[ ${prefix} =~ ^/usr ]]
+then
+    libexecdir="${prefix}/lib/pack-tools/commands/"
 else
-	test -e "./commands/$subcommand" && sh /usr/lib/pack-tools/commands/$subargs
+    libexecdir="${prefix}/commands/"
 fi
+
+if [[ ! -e ${libexecdir}/${subcommand} ]]; then
+    echo "ERROR: $subcommand does not exists, try ${0} --list for help"
+    exit 1
+fi
+
+exec ${libexecdir}${subargs}
