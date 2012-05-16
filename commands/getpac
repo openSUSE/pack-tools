@@ -94,6 +94,12 @@ while [ -n "${1}" ]; do
 		esac
 done
 
+if [ -z "$1" ]
+then
+	echo "no package supplied, exitting."
+	exit 1
+fi
+
 #the only left is package name
 package_name="$1"
 echo "Downloading package $package_name."

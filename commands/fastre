@@ -61,14 +61,15 @@ fi
 salt=`tr -dc A-Za-z0-9_ < /dev/urandom | head -c 8`
 
 builddir=$(mktemp -d)
+sourcedir=$(pwd)
 echo $gzip_define
 rpmbuild \
-  --define="_sourcedir `pwd`" \
+  --define="_sourcedir $sourcedir" \
   --define="_builddir $builddir" \
   --define="__cat basename" \
   --define="$gzip_define" \
   --define="__patch xargs echo >> series_tmp_$salt" \
-  --define="__spec_prep_post test -e series_tmp_$salt && cat series_tmp_$salt | sed  s/-s// | sed s/--fuzz=.// | tr -s ' ' | awk 'BEGIN {FS=OFS=\" \"} {temp=\$1; \$1=\$2; \$2=temp} {print}' > pkg_series_$salt && quilt setup --fuzz=0 \$PWD/pkg_series_$salt ; rm -f series_tmp_$salt ; test -e pkg_series_$salt && quilt push -a ; ln -s -f pkg_series_$salt series ; exit 0 " \
+  --define="__spec_prep_post test -e series_tmp_$salt && cat series_tmp_$salt | sed  s/-s// | sed s/--fuzz=.// | tr -s ' ' | awk 'BEGIN {FS=OFS=\" \"} {temp=\$1; \$1=\$2; \$2=temp} {print}' > pkg_series_$salt && quilt setup --fuzz=0 \$PWD/pkg_series_$salt ; rm -f series_tmp_$salt ; test -e pkg_series_$salt && echo 'insert patch copy here.'  && quilt push -a ; ln -s -f pkg_series_$salt series ; exit 0 " \
   -bp \
   --nodeps \
   $spec
