@@ -4,22 +4,38 @@
 #un/comment for debug/release
 #set -x
 
-#check for 0 args, then print help
-if [ "$#" = "0" ] 
-then
+function pkg_help
+{
 	echo "master command for packaging utilities"
 	echo "try pkg --list for list of subcommands"
 	exit 1
+}
+
+function pkg_list
+{
+	echo "pkg subcommand list:"
+	echo "  fastre/prep/unpack/u:unpack sources, build quilt series and apply patches"
+	echo "  cleaner/c:tries to find out-of-date projects and report that"
+	echo "  spec/s:specfile management - get/set tags, merge conflicting specfile, add patch"
+	echo "  getpac/get/g:download packages for all or only some products, delete unwanted before checkout"
+	echo "  patchinfo/p:fixed patchinfo, opens editor every time"
+	echo "  waitforbuild/wfb/w:wait for build, checks build results in loop"
+	echo "  rsr:recursive submit request - first submit to devel project and if everything goes well, submit to factory"
+	exit 1
+}
+
+#check for 0 args, then print help
+if [ "$#" = "0" ] 
+then
+	pkg_help
 fi
 
 #run thru all the args, find first one which is subcommand
 for i in `seq $#`
 do
-	#if grep -q -- "${!i}" ~/.config/pkg/subcommands
 	if echo ${!i} | grep -qv '^-'
 	then
 		subcommand=${!i}
-		#echo "$subcommand"
 		break
 	fi
 done
@@ -35,10 +51,9 @@ then
 else
 	let k=i
 fi
-#echo $subargs
 
 #prepare arguments
-eval set -- `getopt -a -o v --long verbose -o l --long list  -- "${@:1:$k}"`
+eval set -- `getopt -a -o v --long verbose -o l --long list  -o h --long 'help' -- "${@:1:$k}"`
 
 #process arguments for master command
 while [ -n "$1" ]
@@ -49,9 +64,10 @@ do
 			shift
 		;;
 		-l|--list)
-			echo "pkg subcommand list:"
-			cat ~/.pkg/subcommands | sed -e 's/:/ - /' -e 's/^/  /'
-			exit 1
+			pkg_list
+		;;
+		-h|--help)
+			pkg_help
 		;;
 		--)
 			break
@@ -68,14 +84,11 @@ then
 fi
 
 #check if the subcommand exists
-if cat ~/.pkg/subcommands | cut -d: -f1 | grep -q -e '\(^\|/\)'$subcommand'\($\|/\)'
-then
-	#run the subcommand
-	sh ~/.pkg/$subargs
+curpath=$(readlink -f $0)
+
+if [[ $curpath =~ ^/usr ]]
+then 
+	test -e "/usr/lib/pack-tools/commands/$subcommand" && sh "/usr/lib/pack-tools/commands/$subargs"
 else
-	echo "subcommand '$subcommand' does not exist"
-	echo "try pkg --list for list of subcommands" 
-	exit 1
+	test -e "./commands/$subcommand" && sh "/usr/lib/pack-tools/commands/$subargs"
 fi
-
-

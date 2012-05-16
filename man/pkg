@@ -1,0 +1,64 @@
+.\" Manpage for pkg.
+.\" Contact dlovasko@suse.com to correct errors or typos.
+.TH pkg 1 "09 May 2012" "1.0" "pkg man page"
+.SH NAME
+.B pkg 
+\- packaging utilities
+.SH SYNOPSIS
+.B pkg 
+[GLOBALOPTS] SUBCOMMAND [OPTS] [ARGS...]
+.SH DESCRIPTION
+.B pkg 
+is set of bash scripts utilising common packaging workflow
+.SH SUBCOMMANDS
+.B fastre (prep, unpack, u)
+.RS
+unpack sources, build quilt series and apply patches
+
+.RE
+.B cleaner (c)
+.RS
+tries to find out-of-date projects and report that
+
+.RE
+.B spec (s)
+.RS
+specfile management - get/set tags, merge conflicting specfile, add patch
+
+.RE
+.B getpac (get, g)
+.RS
+download packages for all or only some products, delete unwanted before checkout
+
+.RE
+.B patchinfo (p)
+.RS
+fixed patchinfo, opens editor every time
+
+.RE
+.B waitforbuild (wfb, w)
+.RS
+wait for build, checks build results in loop
+
+.RE
+.B rsr (r)
+.RS
+recursive submit request - first submit to devel project and if everything goes well, submit to factory
+
+.SH ENVIRONMENT
+.B pkg patchinfo
+uses 
+.B EDITOR 
+variable
+.SH FILES
+.B pkg 
+subcommand scripts live in 
+.B ~/.pkg/
+.SH SEE ALSO
+.BR osc (1)
+.SH BUGS
+No known bugs.
+.SH LICENSE
+GNU/GPL
+.SH AUTHOR
+Daniel Lovasko (dlovasko@suse.com)
