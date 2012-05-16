@@ -88,7 +88,7 @@ curpath=$(readlink -f $0)
 
 if [[ $curpath =~ ^/usr ]]
 then 
-	test -e "/usr/lib/pack-tools/commands/$subcommand" && sh "/usr/lib/pack-tools/commands/$subargs"
+	test -e "/usr/lib/pack-tools/commands/$subcommand" && sh /usr/lib/pack-tools/commands/$subargs
 else
-	test -e "./commands/$subcommand" && sh "/usr/lib/pack-tools/commands/$subargs"
+	test -e "./commands/$subcommand" && sh /usr/lib/pack-tools/commands/$subargs
 fi
