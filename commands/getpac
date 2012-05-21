@@ -7,7 +7,7 @@
 function usage
 {
 	echo "getpac - script for advanced package downloading"
-	echo "usage: getpac PACKAGE [--opensuse PATTERN] [--suse PATTERN] [--delete PATTERN] [--delete PATTERN2] ..."
+	echo "usage: getpac PACKAGE [--verbose] [--factory] [--opensuse PATTERN] [--suse PATTERN] [--delete PATTERN] [--delete PATTERN2] ..."
 }
 
 #delete all temporary files
@@ -40,7 +40,7 @@ function cleanup
 trap cleanup EXIT
 
 #parse arguments
-ARGS="$(/usr/bin/getopt -a -o f --long factory -o s: --long suse: -o o: --long opensuse: -o d: --long delete: -o h --long 'help' -- "${@}")"
+ARGS="$(/usr/bin/getopt -a -o a --long all -o v --long verbose -o f --long factory -o s: --long suse: -o o: --long opensuse: -o d: --long delete: -o h --long 'help' -- "${@}")"
 eval set -- ${ARGS}
 
 #no arguments (only -- produced by getopt)
@@ -55,16 +55,9 @@ _suse_patterns=$(mktemp --dry-run)
 _opensuse_patterns=$(mktemp --dry-run)
 
 
-#by default, no factory
+#by default, no factory, no verbose
 factory=no
-
-#branch all opensuse and all suse packages if only package name supplied
-if [ $# = "2" ] #contains package name and '--' 
-then
-	echo "all" > $_opensuse_patterns
-	echo "all" > $_suse_patterns
-	factory=no
-fi
+verbose=no
 
 #parse arguments
 while [ -n "${1}" ]; do
@@ -85,6 +78,20 @@ while [ -n "${1}" ]; do
 				factory=yes
 				shift 1
 			;;
+			-h|--help)
+				usage
+				exit 1
+			;;
+			-v|--verbose)
+				verbose=yes
+				shift
+			;;
+			-a|--all)
+				echo "all" > $_opensuse_patterns
+				echo "all" > $_suse_patterns
+				factory=yes
+				shift
+			;;
 			--)
 				shift 1
 			;;
@@ -96,22 +103,29 @@ done
 
 if [ -z "$1" ]
 then
-	echo "no package supplied, exitting."
+	echo "ERROR: no package"
 	exit 1
 fi
 
 #the only left is package name
 package_name="$1"
-echo "Downloading package $package_name."
+if [[ ! -e $_opensuse_patterns && ! -e $_suse_patterns && $factory = no ]]
+then
+	echo "all" > $_opensuse_patterns
+	echo "all" > $_suse_patterns
+	factory=no
+fi
+
+[[ $verbose = yes ]] && echo "Downloading package $package_name."
 
 function opensuse
 {
 	#if there was at least one -o option
 	if [ -e $_opensuse_patterns ] 
 	then
-		echo ''
-		echo "openSUSE"
-		echo '****************'
+		[[ $verbose = yes ]] && echo ''
+		[[ $verbose = yes ]] && echo "openSUSE"
+		[[ $verbose = yes ]] && echo '****************'
 		#do the mbranch
 		_opensuse_mbranch=$(mktemp)
 		osc -A https://api.opensuse.org mbranch "$package_name" > $_opensuse_mbranch 2>&1
@@ -125,7 +139,7 @@ function opensuse
 		#or the package name is unknown
 		elif [ "`cat $_opensuse_mbranch`" = "BuildService API error: no packages found by search criteria" ]
 		then
-			echo "package not found"
+			echo "ERROR: package not found"
 			return 1
 
 		#or everything was ok and continue
@@ -134,11 +148,11 @@ function opensuse
 			project_name="`sed  -e 's/^Project //' -e 's/ created.$//' $_opensuse_mbranch`"
 
 		else
-			echo "unknown situation, exiting"
+			echo "ERROR: unknown"
 			return 1
 		fi
 
-		echo "Project name is $project_name."
+		[[ $verbose = yes ]] && echo "Project name is $project_name."
 
 		_opensuse_packages=$(mktemp)
 		_opensuse_wanted=$(mktemp)
@@ -159,8 +173,8 @@ function opensuse
 		#accept packages ending only with _Update
 		sed -i -n -r /\(_Update$\|^patchinfo$\)/p $_opensuse_wanted
 
-		echo "Packages that satisfy your filter:"
-		cat $_opensuse_wanted
+		[[ $verbose = yes ]] && echo "Packages that satisfy your filter:"
+		[[ $verbose = yes ]] && cat $_opensuse_wanted
 
 		_opensuse_files=$(mktemp)
 		_opensuse_to_delete=$(mktemp)
@@ -180,7 +194,8 @@ function opensuse
 				#delete remotly
 				osc -A https://api.opensuse.org rremove -f "$project_name" "$line" `tr '\n' ' ' < $_opensuse_to_delete`
 			fi
-			osc -A https://api.opensuse.org checkout "$project_name" "$line" 
+			[[ $verbose = yes ]] && osc -A https://api.opensuse.org checkout "$project_name" "$line" 
+			[[ $verbose = no ]] && osc -A https://api.opensuse.org checkout "$project_name" "$line" 2>&1 > /dev/null
 		done < $_opensuse_wanted
 
 		#if already exists, adapt
@@ -223,9 +238,9 @@ function suse
 	#if there was at least one -s option
 	if [ -e $_suse_patterns ] 
 	then
-		echo ''
-		echo "SUSE_SLE"
-		echo '****************'
+		[[ $verbose = yes ]] && echo ''
+		[[ $verbose = yes ]] && echo "SUSE_SLE"
+		[[ $verbose = yes ]] && echo '****************'
 
 		#do the mbranch
 		_suse_mbranch=$(mktemp)
@@ -240,7 +255,7 @@ function suse
 		#or the package name is unknown
 		elif [ "`cat $_suse_mbranch`" = "BuildService API error: no packages found by search criteria" ]
 		then
-			echo "package not found"
+			echo "ERROR: package not found"
 			return 1
 
 		#or everything was ok and continue
@@ -249,11 +264,11 @@ function suse
 			project_name="`sed  -e 's/^Project //' -e 's/ created.$//' $_suse_mbranch`"
 
 		else
-			echo "unknown situation, exiting"
+			echo "ERROR: unknown"
 			return 1
 		fi
 
-		echo "Project name is $project_name."
+		[[ $verbose = yes ]] && echo "Project name is $project_name."
 
 		_suse_packages=$(mktemp)
 		_suse_wanted=$(mktemp)
@@ -274,8 +289,8 @@ function suse
 		#accept packages ending only with _Update_Test
 		sed -i -n -r /\(_Update_Test$\|^patchinfo$\)/p $_suse_wanted
 
-		echo "Packages that satisfy your filter:"
-		cat $_suse_wanted
+		[[ $verbose = yes ]] && echo "Packages that satisfy your filter:"
+		[[ $verbose = yes ]] && cat $_suse_wanted
 
 		_suse_files=$(mktemp)
 		_suse_to_delete=$(mktemp)
@@ -295,7 +310,8 @@ function suse
 				#delete remotly
 				osc -A https://api.suse.de rremove -f "$project_name" "$line" `tr '\n' ' ' < $_suse_to_delete`
 			fi
-			osc -A https://api.suse.de checkout "$project_name" "$line" 
+			[[ $verbose = yes ]] && osc -A https://api.suse.de checkout "$project_name" "$line" 
+			[[ $verbose = no ]] && osc -A https://api.suse.de checkout "$project_name" "$line" 2>&1 > /dev/null
 		done < $_suse_wanted
 
 		#if already exists, adapt
@@ -337,9 +353,9 @@ function factory
 	#if there was option -f = we need to download also openSUSE:Factory release
 	if [ "$factory" = "yes" ]
 	then
-		echo ''
-		echo "openSUSE:Factory"
-		echo '****************'
+		[[ $verbose = yes ]] && echo ''
+		[[ $verbose = yes ]] && echo "openSUSE:Factory"
+		[[ $verbose = yes ]] && echo '****************'
 
 		#try to branch project from openSUSE:Factory - this will link to actual devel package
 		_factory_branch=$(mktemp)
@@ -355,12 +371,12 @@ function factory
 			then
 				project_name=$(cat $_factory_branch | tail -n 1 | sed 's/^.* home:/home:/' | sed 's@/'"$package_name"'$@@')
 			else
-				echo "unknown error, exiting"
+				echo "ERROR: unknown"
 				return 1
 			fi
 		fi
 		
-		echo "Project name is $project_name."
+		[[ $verbose = yes ]] && echo "Project name is $project_name."
 		
 		#get file list
 		_factory_files=$(mktemp)
@@ -377,8 +393,9 @@ function factory
 		fi
 
 		#after that, checkout/download only wanted
-		osc -A https://api.opensuse.org checkout "$project_name" "$package_name"
-		
+		[[ $verbose = yes ]] && osc -A https://api.opensuse.org checkout "$project_name" "$package_name"
+		[[ $verbose = no ]] && osc -A https://api.opensuse.org checkout "$project_name" "$package_name" 2>&1 > /dev/null
+
 		#directory layout
 		if [ -e "$package_name" ]
 		then
