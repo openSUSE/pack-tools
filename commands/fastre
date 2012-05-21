@@ -2,39 +2,58 @@
 #fast package unpacking & quilt series creation by dlovasko@suse.com
 
 #un/comment for debug/release
+#todo determine if normal or special - if ends patch.gz
 set -x
 
 #check if we are in osc directory
-if [ ! -e .osc ]
+if [ ! -e .osc/_package ]
 then
-	echo "you need to run this command inside osc directory"
+	echo "ERROR: not in osc package directory"
 	exit 1
 fi
 
-gzip_define="__gzip function takefirst { basename \"\$2\" ; } ; takefirst"
+gzip_define="__gzip gzip"
 
-#parse commandline arguments
-if [ "$#" = 0 ] 
+#prepare arguments
+eval set -- `getopt -a -o g --long gzip-special -o h --long 'help' -- "${@}"`
+
+#process arguments
+verbose=no
+while [ -n "$1" ]
+do
+	case $1 in
+		-v|--verbose)
+			verbose=yes
+			shift
+		;;
+		-g|--gzip-special)
+			gzip_define="__gzip function takefirst { basename \"\$2\" ; } ; takefirst"
+			shift
+		;;
+		-h|--help)
+			echo "prep subcommand: fast package unpacking & quilt series creation"
+			echo "usage: pkg prep [-h|--help] [-g|--gzip-special] [specfile]"
+			exit 1
+		;;
+		--)
+			shift
+			break
+		;;
+	esac
+done
+
+#specfile name
+if [ -n "$1" ]
 then
-	#if no arguments, try to guess the 
-	spec=`cat .osc/_package | sed 's/\..*//'`.spec
-else
-	#check for help crave
-	if [ "$1" = "-h" -o "$1" = "--help" ]
-	then
-		echo "prep subcommand: fast package unpacking & quilt series creation"
-		echo "usage: pgg prep [-h] [specfile]"
-		exit 1
-	fi
-
-	if [ "$1" = "-g" -o "$1" = "--gzip-normal" ]
-	then
-		gzip_define="__gzip gzip"
-		shift
-	fi
-	
-	#assume it is path of specfile
 	spec="$1"
+else
+	spec=$(cat .osc/_package | sed 's/\..*//').spec
+fi
+
+if [ -z "$spec" -o ! -e "$spec" ] 
+then
+	echo "ERROR: no spec file"
+	exit 1
 fi
 
 #check if prep contains quilt operations
@@ -69,7 +88,7 @@ rpmbuild \
   --define="__cat basename" \
   --define="$gzip_define" \
   --define="__patch xargs echo >> series_tmp_$salt" \
-  --define="__spec_prep_post test -e series_tmp_$salt && cat series_tmp_$salt | sed  s/-s// | sed s/--fuzz=.// | tr -s ' ' | awk 'BEGIN {FS=OFS=\" \"} {temp=\$1; \$1=\$2; \$2=temp} {print}' > pkg_series_$salt && quilt setup --fuzz=0 \$PWD/pkg_series_$salt ; rm -f series_tmp_$salt ; test -e pkg_series_$salt && echo 'insert patch copy here.'  && quilt push -a ; ln -s -f pkg_series_$salt series ; exit 0 " \
+  --define="__spec_prep_post test -e series_tmp_$salt && cat series_tmp_$salt && cat series_tmp_$salt | sed  -e 's/-s//' -e 's/-b --suffix .* //' | sed s/--fuzz=.// | tr -s ' ' | awk 'BEGIN {FS=OFS=\" \"} {temp=\$1; \$1=\$2; \$2=temp} {print}' > pkg_series_$salt && quilt setup --fuzz=0 \$PWD/pkg_series_$salt ; rm -f series_tmp_$salt ; test -e pkg_series_$salt && cat pkg_series_$salt | cut -d' ' -f1 | sed s@^@${sourcedir}/@ | xargs cp -t patches/  && quilt push -a ; test -e pkg_series_$salt && ln -s -f pkg_series_$salt series ; exit 0 " \
   -bp \
   --nodeps \
   $spec
@@ -77,7 +96,7 @@ rpmbuild \
 #if rpmbuild was succesful - echo positive message
 if [ "$?" = "0" ] 
 then
-	mv $builddir/* .
-	rm -r $builddir
-	echo "unpack succesful"
+	rm $(find $builddir -maxdepth 1 -type f)
+	mv -f $builddir/* .
+	rm -rf $builddir
 fi
