@@ -75,7 +75,7 @@ fi
 ##every patchname is written to a series file
 ##gzipped patches are processed nearly the same, except the rpmbuild is always appending the -dc option, so we skip it with inline takefirst function
 ##in the prep_post phase - quilt setup seriesfile && quilt push -a
-##if succesful - copy back
+##copy back
 
 salt=`tr -dc A-Za-z0-9_ < /dev/urandom | head -c 8`
 
@@ -93,11 +93,9 @@ rpmbuild \
   --nodeps \
   $spec
 
-#if rpmbuild was succesful - echo positive message
-if [ "$?" = "0" ] 
-then
-	rm $(find $builddir -maxdepth 1 -type f)
-	mv -f $builddir/* .
-fi
+#remove patches from build dir
+rm $(find $builddir -maxdepth 1 -type f)
 
+#move back
+mv -f $builddir/* .
 rm -rf $builddir
