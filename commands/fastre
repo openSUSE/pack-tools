@@ -80,6 +80,8 @@ fi
 salt=`tr -dc A-Za-z0-9_ < /dev/urandom | head -c 8`
 
 builddir=$(mktemp -d)
+trap "rm -rf ${builddir}" INT EXIT QUIT
+
 sourcedir=$(pwd)
 echo $gzip_define
 rpmbuild \
@@ -102,4 +104,3 @@ find $builddir -maxdepth 1 -type d -printf '%f\n' | xargs rm -rf
 
 #move things back
 mv -f $builddir/* .
-rm -rf $builddir
