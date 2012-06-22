@@ -93,9 +93,13 @@ rpmbuild \
   --nodeps \
   $spec
 
-#remove patches from build dir
-rm $(find $builddir -maxdepth 1 -type f)
+# remove all garbage from directory (mainly patches)
+find $builddir -maxdepth 1 -not -type d -exec rm -f {} +
 
-#move back
+#remove the unpacked dirs in current location
+#XXX: note that this predicate matches the /tmp/tmp.blablabla as well, but -f solves that :)
+find $builddir -maxdepth 1 -type d -printf '%f\n' | xargs rm -rf
+
+#move things back
 mv -f $builddir/* .
 rm -rf $builddir
