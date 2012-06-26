@@ -3,7 +3,7 @@
 
 #un/comment for debug/release
 #todo determine if normal or special - if ends patch.gz
-set -x
+#set -x
 
 #check if we are in osc directory
 if [ ! -e .osc/_package ]
@@ -12,27 +12,25 @@ then
 	exit 1
 fi
 
-gzip_define="__gzip gzip"
+gzip_define="__gzip function takefirst { [[ \$2 =~ \".patch.\" || \$2 =~ \".dif.\" || \$2 =~ \".diff.\" ]] && basename \"\$2\" || gzip \$@ ; } ; takefirst"
+bzip2_define="__bzip2 function takefirst { [[ \$2 =~ \".patch.\" || \$2 =~ \".dif.\" || \$2 =~ \".diff.\" ]] && basename \"\$2\" || bzip2 \$@ ; } ; takefirst"
 
 #prepare arguments
-eval set -- `getopt -a -o g --long gzip-special -o h --long 'help' -- "${@}"`
+eval set -- `getopt -a -o v --long verbose -o d --long debug -o h --long 'help' -- "${@}"`
 
 #process arguments
 verbose=no
+rpmopt=quiet
 while [ -n "$1" ]
 do
 	case $1 in
-		-v|--verbose)
+		-v|--verbose|-d|--debug)
 			verbose=yes
 			shift
 		;;
-		-g|--gzip-special)
-			gzip_define="__gzip function takefirst { basename \"\$2\" ; } ; takefirst"
-			shift
-		;;
 		-h|--help)
-			echo "prep subcommand: fast package unpacking & quilt series creation"
-			echo "usage: pkg prep [-h|--help] [-g|--gzip-special] [specfile]"
+			echo "fastre subcommand: fast package unpacking & quilt series creation"
+			echo "usage: pkg prep [-h|--help] [-v|--verbose|-d|--debug] [specfile]"
 			exit 1
 		;;
 		--)
@@ -41,6 +39,13 @@ do
 		;;
 	esac
 done
+
+#apply verbose/debug setting
+if [[ $verbose = "yes" ]]
+then
+	set -x
+	rpmopt=verbose
+fi
 
 #specfile name
 if [ -n "$1" ]
@@ -52,16 +57,19 @@ fi
 
 if [ -z "$spec" -o ! -e "$spec" ] 
 then
-	echo "ERROR: no spec file"
+	echo "ERROR: no spec file found"
 	exit 1
 fi
+
+#check for wrong releases
+sed -i 's/^Release.*<.*>$/Release:        0/' $spec
 
 #check if prep contains quilt operations
 if sed -n '/^%prep/,/^$/p' $spec | grep -q quilt
 then
 	echo "warninig: your prep script is doing something nasty with quilt. this will probably break this script. continue? (y/n)"
 	read answer
-	if [ $answer != 'y' ]
+	if [[ ! $answer =~ ^y ]]
 	then
 		exit 1
 	fi
@@ -79,18 +87,35 @@ fi
 
 salt=`tr -dc A-Za-z0-9_ < /dev/urandom | head -c 8`
 
+sourcedir=$(pwd)
 builddir=$(mktemp -d)
 trap "rm -rf ${builddir}" INT EXIT QUIT
 
-sourcedir=$(pwd)
-echo $gzip_define
 rpmbuild \
+  --$rpmopt \
   --define="_sourcedir $sourcedir" \
   --define="_builddir $builddir" \
   --define="__cat basename" \
   --define="$gzip_define" \
+  --define="$bzip2_define" \
   --define="__patch xargs echo >> series_tmp_$salt" \
-  --define="__spec_prep_post test -e series_tmp_$salt && cat series_tmp_$salt && cat series_tmp_$salt | sed  -e 's/-s//' -e 's/-b --suffix .* //' | sed s/--fuzz=.// | tr -s ' ' | awk 'BEGIN {FS=OFS=\" \"} {temp=\$1; \$1=\$2; \$2=temp} {print}' > pkg_series_$salt && quilt setup --fuzz=0 \$PWD/pkg_series_$salt ; rm -f series_tmp_$salt ; test -e pkg_series_$salt && cat pkg_series_$salt | cut -d' ' -f1 | sed s@^@${sourcedir}/@ | xargs cp -t patches/  && quilt push -a ; test -e pkg_series_$salt && ln -s -f pkg_series_$salt series ; exit 0 " \
+  --define="__spec_prep_post \
+test -e series_tmp_$salt && \
+cat series_tmp_$salt | \
+sed  -e 's/-s//' -e 's/-b --suffix .* //' | \
+sed s/--fuzz=.// | tr -s ' ' | \
+awk 'BEGIN {FS=OFS=\" \"} {temp=\$1; \$1=\$2; \$2=temp} {print}' > pkg_series_$salt && \
+quilt setup --fuzz=0 \$PWD/pkg_series_$salt ; \
+rm -f series_tmp_$salt ; \
+test -e pkg_series_$salt && \
+cat pkg_series_$salt | \
+cut -d' ' -f1 | \
+sed s@^@${sourcedir}/@ | \
+xargs cp -t patches/  && \
+quilt push -a ; \
+test -e pkg_series_$salt && \
+ln -s -f pkg_series_$salt series ; \
+exit 0" \
   -bp \
   --nodeps \
   $spec
@@ -99,8 +124,12 @@ rpmbuild \
 find $builddir -maxdepth 1 -not -type d -exec rm -f {} +
 
 #remove the unpacked dirs in current location
-#XXX: note that this predicate matches the /tmp/tmp.blablabla as well, but -f solves that :)
-find $builddir -maxdepth 1 -type d -printf '%f\n' | xargs rm -rf
+find $builddir -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | xargs rm -rf
 
 #move things back
-mv -f $builddir/* .
+mv -f $builddir/* . &> /dev/null
+if [[ $? != "0" ]]
+then
+	echo "ERROR: unpack failed, cannot move files from build dir"
+	exit 1
+fi
