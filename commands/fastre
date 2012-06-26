@@ -14,6 +14,7 @@ fi
 
 gzip_define="__gzip function takefirst { [[ \$2 =~ \".patch.\" || \$2 =~ \".dif.\" || \$2 =~ \".diff.\" ]] && basename \"\$2\" || gzip \$@ ; } ; takefirst"
 bzip2_define="__bzip2 function takefirst { [[ \$2 =~ \".patch.\" || \$2 =~ \".dif.\" || \$2 =~ \".diff.\" ]] && basename \"\$2\" || bzip2 \$@ ; } ; takefirst"
+xz_define="__xz function takefirst { [[ \$2 =~ \".patch.\" || \$2 =~ \".dif.\" || \$2 =~ \".diff.\" ]] && basename \"\$2\" || xz \$@ ; } ; takefirst"
 
 #prepare arguments
 eval set -- `getopt -a -o v --long verbose -o d --long debug -o h --long 'help' -- "${@}"`
