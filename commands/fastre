@@ -103,19 +103,19 @@ rpmbuild \
   --define="__spec_prep_post \
 test -e series_tmp_$salt && \
 cat series_tmp_$salt | \
-sed  -e 's/-s//' -e 's/-b --suffix .* //' | \
+sed  -e 's/-s//' -e 's/-b --suffix .* //' -e 's/ -E//' | \
 sed s/--fuzz=.// | tr -s ' ' | \
 awk 'BEGIN {FS=OFS=\" \"} {temp=\$1; \$1=\$2; \$2=temp} {print}' > pkg_series_$salt && \
 quilt setup --fuzz=0 \$PWD/pkg_series_$salt ; \
 rm -f series_tmp_$salt ; \
+test -e pkg_series_$salt && \
+ln -s -f pkg_series_$salt series ; \
 test -e pkg_series_$salt && \
 cat pkg_series_$salt | \
 cut -d' ' -f1 | \
 sed s@^@${sourcedir}/@ | \
 xargs cp -t patches/  && \
 quilt push -a ; \
-test -e pkg_series_$salt && \
-ln -s -f pkg_series_$salt series ; \
 exit 0" \
   -bp \
   --nodeps \
