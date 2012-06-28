@@ -1,0 +1,140 @@
+#! /usr/bin/python
+
+import sys
+import osc.core
+import osc.conf
+import os
+import time
+import getopt
+
+
+#parse arguments
+opts, args = getopt.getopt(sys.argv[1:], "ht:v", ["help", "time="])
+   
+verbose = False
+waittime = 100
+for o, a in opts:
+    if o == "-v":
+        verbose = True
+    elif o in ("-h", "--help"):
+        print "bubble [--time T]"
+        print "bubble submit request from home:branch project to devel project. waits for build in devel project, and if all builds successfuly, submits from devel project to factory."
+        sys.exit(1)
+    elif o in ("-t", "--time"):
+        waittime = a
+    else:
+        #assert False, "unhandled option"
+        print "unhandled option"
+
+if verbose:
+	print "Starting"
+        
+#set up data from .oscrc
+osc.conf.get_config()
+
+#find working copy package
+p = osc.core.findpacs(os.curdir)[0]
+prj = p.prjname
+pac = p.name
+apiurl = p.apiurl
+
+#get devel project
+devel = osc.core.show_develproject(apiurl, "openSUSE:Factory", pac)
+
+#wait for everything to be not dirty & somehow done
+while True:
+	r = osc.core.get_package_results(apiurl, devel, pac, None, ['openSUSE_Factory'], [])
+	wait = False
+	for res in r:
+		if res.has_key('_oldstate'):
+			continue
+		if res['dirty'] == True:
+			wait = True
+		if res['code'] in ('blocked', 'scheduled', 'dispatching', 'building', 'signing', 'finished'):
+			wait = True
+	if wait == False:
+		break
+	print "Waiting", waittime, "seconds for build to finish."
+	time.sleep(waittime)
+
+#submit request from prj to devel
+result = osc.core.create_submit_request(apiurl, prj, pac, devel, pac, "submit - testing bsr.py", None, None)
+
+#accept
+result2 = osc.core.change_request_state(apiurl, result, 'accepted', "accept - testing bsr.py")
+
+#print information
+if verbose:
+	print "Submited package", pac, "from project", prj, "to project", devel
+	print "Request ID:", result
+	print "Accept response:", result2
+
+
+#wait for change to dirty
+while True:
+	r = osc.core.get_package_results(apiurl, devel, pac, None, ['openSUSE_Factory'], [])
+	dirty = True;
+	for res in r:
+		if res.has_key('_oldstate'):
+			continue
+		if res['dirty'] == False:
+			dirty = False;
+	if dirty == True:
+		break
+	if verbose:
+		print "Waiting 10 seconds for dirty status"
+	time.sleep(10)
+	
+if verbose:
+	print "Build status in devel project has changed"
+	
+#wait for results to be final
+while True:
+	r = osc.core.get_package_results(apiurl, devel, pac, None, ['openSUSE_Factory'], [])
+	wait = False
+	for res in r:
+		if res.has_key('_oldstate'):
+			continue
+		if res['dirty'] == True:
+			wait = True
+		if res['code'] in ('blocked', 'scheduled', 'dispatching', 'building', 'signing', 'finished'):
+			wait = True
+	if wait == False:
+		break
+	print "Waiting", waittime, "seconds for build to finish."
+	time.sleep(waittime)
+		
+if verbose:
+	print "Build finished"
+
+	
+#check results
+if verbose:
+	print ""
+	print "Checking results..."
+r = osc.core.get_package_results(apiurl, devel, pac, None, ['openSUSE_Factory'], [])
+
+OK = True
+for res in r:
+	if res.has_key('_oldstate'):
+		continue
+	if res['code'] != 'succeeded' or res['dirty'] == True:
+		OK = False
+	print res['arch'],"=", res['code']
+	
+	
+if OK:
+	if verbose:
+		print "OK"
+else:
+	print "ERROR: Unsuccessful build. Exit"
+	sys.exit(1)
+  
+#everything was ok, submit to factory
+result4 = osc.core.create_submit_request(apiurl, devel, pac, 'openSUSE:Factory', pac, "submit2 - testing bsr.py", None, None)
+
+#print information
+if verbose:
+	print ""
+	print "Submited package", pac, "from project", devel, "to project openSUSE:Factory"
+	print "Request ID:", result4
