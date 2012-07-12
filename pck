@@ -7,20 +7,19 @@
 function pkg_help
 {
 	echo "master command for packaging utilities"
-	echo "try pkg --list for list of subcommands"
+	echo "try pck --list for list of subcommands"
 	exit 1
 }
 
 function pkg_list
 {
-	echo "pkg subcommand list:"
-	echo "  fastre/prep/unpack/u:unpack sources, build quilt series and apply patches"
-	echo "  cleaner/c:tries to find out-of-date projects and report that"
-	echo "  spec/s:specfile management - get/set tags, merge conflicting specfile, add patch"
-	echo "  getpac/get/g:download packages for all or only some products, delete unwanted before checkout"
-	echo "  patchinfo/p:fixed patchinfo, opens editor every time"
-	echo "  waitforbuild/wfb/w:wait for build, checks build results in loop"
-	echo "  rsr:recursive submit request - first submit to devel project and if everything goes well, submit to factory"
+	echo "pck subcommand list:"
+	echo "  fastre:unpack sources, build quilt series and apply patches"
+	echo "  clean:tries to find out-of-date projects and report that"
+	echo "  spec:specfile management - get/set tags, merge conflicting specfile, add patch"
+	echo "  getpac:download packages for all or only some products, delete unwanted before checkout"
+	echo "  patchinfo:fixed patchinfo, opens editor every time"
+	echo "  clean:recursive submit request - first submit to devel project and if everything goes well, submit to factory"
 	exit 1
 }
 

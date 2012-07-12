@@ -55,7 +55,7 @@ case $1 in
 	get)
 		if [ "$2" = "-h" -o "$2" = "--help" ]
 		then
-				echo "usage: pkg spec get WHAT [SPECFILE]"
+				echo "usage: pck spec get WHAT [SPECFILE]"
 				echo "when no specfile specified, specfile is deduced from .osc/_package"
 				exit 1
 		fi
@@ -74,7 +74,7 @@ case $1 in
 	rget)
 		if [ "$2" = "-h" -o "$2" = "--help" ]
 		then
-				echo "usage: pkg spec rget PACKAGE WHAT"
+				echo "usage: pck spec rget PACKAGE WHAT"
 				exit 1
 		fi
 		
@@ -143,7 +143,7 @@ case $1 in
 				exit 0
 			;;
 			-h|--help)
-				echo "usage: pkg spec set tag [OLD_VALUE] [NEW_VALUE] [SPECFILE]"
+				echo "usage: pck spec set tag [OLD_VALUE] [NEW_VALUE] [SPECFILE]"
 				echo "when no specfile specified, specfile is deduced from .osc/_package"
 				exit 1
 			;;
@@ -269,24 +269,6 @@ case $1 in
 		fi
 		exit 0
 	;;
-
-	fixsles|fixrelease|fix)
-		if [ "$2" = '-h' -o "$2" = '--help' ]
-		then
-			echo "usage: pkg spec fixsles [specfile]"
-			exit 1
-		fi
-
-		if [ -n "$2" ]
-		then
-			specfile="$2"
-		else
-			specfile=`cat .osc/_package | sed 's/\..*//'`.spec
-		fi
-		
-		sed -i 's/^Release.*$/Release:        0/g' $specfile
-	;;
-
 	-h|--help)
 		usage
 	;;
