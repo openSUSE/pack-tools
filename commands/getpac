@@ -173,6 +173,18 @@ function opensuse
 		#accept packages ending only with _Update
 		sed -i -n -r /\(_Update$\|^patchinfo$\)/p $_opensuse_wanted
 
+		#check if there are any packages 
+		if [[ ! -s $_opensuse_wanted ]]
+		then
+			echo "ERROR: openSUSE filter is not able to match anything."
+			if [[ `cat $_opensuse_patterns` = '*' ]]
+			then
+				echo "Maybe you wanted to use '.*' (pattern matching uses regular expressions)"
+			fi
+
+			return 1 
+		fi
+
 		[[ $verbose = yes ]] && echo "Packages that satisfy your filter:"
 		[[ $verbose = yes ]] && cat $_opensuse_wanted
 
@@ -288,6 +300,18 @@ function suse
 
 		#accept packages ending only with _Update_Test
 		sed -i -n -r /\(_Update_Test$\|^patchinfo$\)/p $_suse_wanted
+
+		#check if there are any packages 
+		if [[ ! -s $_suse_wanted ]]
+		then
+			echo "ERROR: SUSE filter is not able to match anything."
+			if [[ `cat $_suse_patterns` = '*' ]]
+			then
+				echo "Maybe you wanted to use '.*' (pattern matching uses regular expressions)"
+			fi
+
+			return 1 
+		fi
 
 		[[ $verbose = yes ]] && echo "Packages that satisfy your filter:"
 		[[ $verbose = yes ]] && cat $_suse_wanted
