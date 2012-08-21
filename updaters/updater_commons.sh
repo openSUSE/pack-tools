@@ -1,6 +1,8 @@
 #updater commons
 #Daniel Lovasko (dlovasko@suse.com)
 
+set -x
+
 #add pair to asociative array
 function add_pair
 {
@@ -20,6 +22,12 @@ function run_pairs
 		echo "file: $i"
 		echo "func: ${pairs[$i]}"
 
+		if [[ ! -e "$i" ]]
+		then
+			echo "ERROR: Could not match file $i"
+			continue
+		fi
+
 		retval=$(${pairs[$i]} $i)
 
 		#if we updated, add file and version info to update string used in osc vc
@@ -32,10 +40,12 @@ function run_pairs
 	#if something was updated
 	if [[ -n $update_string ]]
 	then
-		pck spec set tag Version $retval
+		oldversion=$(pck spec get Version | sed 's/Version: *//')
+		pck spec set tag Version $oldversion $retval
 		osc ar
 		osc vc -m "$update_string"
-		osr sr
+		osc ci -m "$update_string"
+		osr sr -m "$update_string"
 	fi
 
 }
@@ -51,8 +61,8 @@ function do_update
 		fi
 
 		#run tests in selected version
-		cd $directory
+		pushd "$directory"
 			run_pairs
-		cd ..
+		popd
 	done
 }

@@ -2,7 +2,7 @@
 #Daniel Lovasko (dlovasko@suse.com)
 #based on code by Dirk Muller
 
-source updater_commons.sh
+source ./updater_commons.sh
 
 function flashplugin
 {
@@ -34,7 +34,7 @@ function flashplugin
 	if [[ $downloaded_md5 != $actual_md5 ]]
 	then
 		version=$(strings  libflashplayer.so | grep "LNX 11," |cut -d' ' -f2 | sed -e 's#,#.#g')
-        rm $f
+		rm $f
 
 		#copy and repack with bz2 algorithm
 		cp "../install_flash_player_11_linux.$a.tar.gz" .
@@ -58,13 +58,14 @@ function flashplayer
 	#try to avoid multiple same downloads
 	if [[ ! -e "../flashplayer_11_sa.$a.tar.gz" ]]
 	then
-		wget -q -P .. http://fpdownload.macromedia.com/pub/flashplayer/updaters/11/flashplayer_11_sa.$arch.tar.gz
+		wget -q -P .. http://fpdownload.macromedia.com/pub/flashplayer/updaters/11/flashplayer_11_sa.$a.tar.gz
 	fi
 	
 	#local md5sum
+	echo "reading $f"
 	tar xf $f flashplayer
 	actual_md5=$(md5sum flashplayer | cut -d' ' -f1)
-	rm -f libflashplayer.so 
+	rm -f flashplayer
 
 	#downloaded md5sum
 	tar xf "../flashplayer_11_sa.$a.tar.gz" flashplayer
@@ -92,12 +93,12 @@ function flashplayer
 #flag potential files & select corresponding function name
 declare -A pairs
 add_pair install_flash_player_11*_linux.i386.tar.bz2 'flashplugin i386'
-add_pair install_flash_player_11*_linux.x86_64.tar.bz2 'flshplugin x86_64'
+add_pair install_flash_player_11*_linux.x86_64.tar.bz2 'flashplugin x86_64'
 add_pair flashplayer_*_sa.i386.tar.bz2 'flashplayer i386'
 add_pair flashplayer_*_sa.x86_64.tar.bz2 'flashplayer x86_64'
 
 #get all maintained versions of flash-player
-pck getpac flash-player
+pck getpac -v flash-player
 
 #try to upgrade every maintained version
 cd flash-player
