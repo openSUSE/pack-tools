@@ -34,6 +34,7 @@ function cleanup
 	test -e "$_factory_branch" && rm -f "$_factory_branch"
 	test -e "$_factory_to_delete" && rm -f "$_factory_to_delete"
 	test -e "$_factory_files" && rm -f "$_factory_files"
+	test -e "$_factory_my_pkg" && rm -f "$_factory_my_pkg"
 }
 
 #when the script ends, run cleanup
@@ -381,25 +382,35 @@ function factory
 		[[ $verbose = yes ]] && echo "openSUSE:Factory"
 		[[ $verbose = yes ]] && echo '****************'
 
-		#try to branch project from openSUSE:Factory - this will link to actual devel package
-		_factory_branch=$(mktemp)
-		osc -A https://api.opensuse.org branch "openSUSE:Factory" "$package_name" &> $_factory_branch
-		retcode=$?
-
-		#obtain project name
-		if [ "$retcode" = "0" ]
+		#get results of osc my pkg - if i am maintainer of the package - only download, do not branch
+		_factory_my_pkg=$(mktemp)
+		osc -A https://api.opensuse.org my pkg > $_factory_my_pkg
+		
+		if grep -q "${package_name}$" "$_factory_my_pkg"
 		then
-			project_name=$(cat $_factory_branch | tail -n 1 | sed 's/^.* home:/home:/' | sed 's@/'"$package_name"'$@@')
+			project_name=$(grep "${package_name}$" "$_factory_my_pkg" | sed 's@/.*@@')
+			[[ $verbose = yes ]] && echo 'You are the maintainer of this package, no branch will be created (only direct checkout).'
 		else
-			if grep -q 'branch target package already exists' $_factory_branch
+			#try to branch project from openSUSE:Factory - this will link to actual devel package
+			_factory_branch=$(mktemp)
+			osc -A https://api.opensuse.org branch "openSUSE:Factory" "$package_name" &> $_factory_branch
+			retcode=$?
+
+			#obtain project name
+			if [ "$retcode" = "0" ]
 			then
 				project_name=$(cat $_factory_branch | tail -n 1 | sed 's/^.* home:/home:/' | sed 's@/'"$package_name"'$@@')
 			else
-				echo "ERROR: unknown"
-				return 1
+				if grep -q 'branch target package already exists' $_factory_branch
+				then
+					project_name=$(cat $_factory_branch | tail -n 1 | sed 's/^.* home:/home:/' | sed 's@/'"$package_name"'$@@')
+				else
+					echo "ERROR: unknown"
+					return 1
+				fi
 			fi
-		fi
-		
+		fi 
+
 		[[ $verbose = yes ]] && echo "Project name is $project_name."
 		
 		#get file list

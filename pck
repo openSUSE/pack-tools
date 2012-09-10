@@ -4,6 +4,9 @@
 #un/comment for debug/release
 #set -x
 
+#turn off globing - prevents package regexp pattern completion to local directory names, eg. '.*' -> '.osc'
+set -f
+
 function pkg_help
 {
 	echo "master command for packaging utilities"
@@ -83,9 +86,15 @@ then
 	exit 0
 fi
 
+#turn globing on for prefix creation
+set +f
+
 #check if the subcommand exists
 curpath=$(readlink -f $0)
 prefix=${curpath%/*}
+
+#turn globing off to prevent unwanted completion in exec call
+set -f
 
 if [[ ${prefix} =~ ^/usr ]]
 then
