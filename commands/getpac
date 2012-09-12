@@ -41,7 +41,7 @@ function cleanup
 trap cleanup EXIT
 
 #parse arguments
-ARGS="$(/usr/bin/getopt -a -o a --long all -o v --long verbose -o f --long factory -o s: --long suse: -o o: --long opensuse: -o d: --long delete: -o h --long 'help' -- "${@}")"
+ARGS="$(/usr/bin/getopt -a -o a --long all -o v --long verbose -o f --long factory -o s:: --long suse:: -o o:: --long opensuse:: -o d: --long delete: -o h --long 'help' -- "${@}")"
 eval set -- ${ARGS}
 
 #no arguments (only -- produced by getopt)
@@ -68,11 +68,23 @@ while [ -n "${1}" ]; do
 				shift 2
 			;;
 			-o|--opensuse)
-				echo "$2" >> $_opensuse_patterns
+				if [ -z "$2" ]
+				then
+					echo "all" > $_opensuse_patterns
+				else
+					echo "$2" >> $_opensuse_patterns
+				fi
+
 				shift 2
 			;;
 			-s|--suse)
-				echo "$2" >> $_suse_patterns
+				if [ -z "$2" ]
+				then
+					echo "all" > $_suse_patterns
+				else
+					echo "$2" >> $_suse_patterns
+				fi
+
 				shift 2
 			;;
 			-f|--factory)
@@ -118,6 +130,8 @@ then
 fi
 
 [[ $verbose = yes ]] && echo "Downloading package $package_name."
+
+###############################################################################
 
 function opensuse
 {
