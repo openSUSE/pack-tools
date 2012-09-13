@@ -87,6 +87,8 @@ fi
 ##copy back
 
 salt=`tr -dc A-Za-z0-9_ < /dev/urandom | head -c 8`
+salt_patches=`tr -dc A-Za-z0-9_ < /dev/urandom | head -c 8`
+salt_series=`tr -dc A-Za-z0-9_ < /dev/urandom | head -c 8`
 
 sourcedir=$(pwd)
 builddir=$(mktemp -d)
@@ -101,6 +103,8 @@ rpmbuild \
   --define="$bzip2_define" \
   --define="__patch xargs echo >> series_tmp_$salt" \
   --define="__spec_prep_post \
+test -e patches && echo \"patches_$salt_patches\" >> .pc/.quilt_patches ; \
+test -e series && echo \"series_$salt_series\" >> .pc/.quilt_series ; \
 test -e series_tmp_$salt && \
 cat series_tmp_$salt | \
 sed  -e 's/-s//' -e 's/-b --suffix .* //' -e 's/ -E//' | \

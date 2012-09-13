@@ -41,7 +41,7 @@ function cleanup
 trap cleanup EXIT
 
 #parse arguments
-ARGS="$(/usr/bin/getopt -a -o a --long all -o v --long verbose -o f --long factory -o s:: --long suse:: -o o:: --long opensuse:: -o d: --long delete: -o h --long 'help' -- "${@}")"
+ARGS="$(/usr/bin/getopt -a -o b --long branch -o a --long all -o v --long verbose -o f --long factory -o s:: --long suse:: -o o:: --long opensuse:: -o d: --long delete: -o h --long 'help' -- "${@}")"
 eval set -- ${ARGS}
 
 #no arguments (only -- produced by getopt)
@@ -59,6 +59,7 @@ _opensuse_patterns=$(mktemp --dry-run)
 #by default, no factory, no verbose
 factory=no
 verbose=no
+branch=no
 
 #parse arguments
 while [ -n "${1}" ]; do
@@ -103,6 +104,10 @@ while [ -n "${1}" ]; do
 				echo "all" > $_opensuse_patterns
 				echo "all" > $_suse_patterns
 				factory=yes
+				shift
+			;;
+			-b|--branch)
+				branch=yes
 				shift
 			;;
 			--)
@@ -400,7 +405,7 @@ function factory
 		_factory_my_pkg=$(mktemp)
 		osc -A https://api.opensuse.org my pkg > $_factory_my_pkg
 		
-		if grep -q "${package_name}$" "$_factory_my_pkg"
+		if grep -q "${package_name}$" "$_factory_my_pkg" && [[ $branch = no ]]
 		then
 			project_name=$(grep "${package_name}$" "$_factory_my_pkg" | sed 's@/.*@@')
 			[[ $verbose = yes ]] && echo 'You are the maintainer of this package, no branch will be created (only direct checkout).'
