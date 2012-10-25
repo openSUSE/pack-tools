@@ -1,0 +1,79 @@
+#!/bin/bash
+
+# Utility to find the set of rpms most recently built via osc build on
+# the local system.
+
+me=`basename $0`
+
+usage () {
+    # Call as: usage [EXITCODE] [USAGE MESSAGE]
+    exit_code=1
+    if [[ "$1" == [0-9] ]]; then
+        exit_code="$1"
+        shift
+    fi
+    if [ -n "$1" ]; then
+        echo "$*" >&2
+        echo
+    fi
+
+    cat <<EOF >&2
+Usage: $me
+EOF
+    exit "$exit_code"
+}
+
+if [ "$1" == '--help' ]; then
+    usage 0
+fi
+
+if [ $# -gt 0 ]; then
+    usage
+fi
+
+if ! buildroot=`find-newest-buildroot`; then
+    echo "Failed to find newest buildroot" >&2
+    exit 1
+fi
+
+if [ -t 1 ]; then
+    echo "Newest buildroot:"
+    echo "    $buildroot"
+fi
+
+rpmsdir=
+for path in home/abuild/rpmbuild usr/src/packages; do
+    candidate=$buildroot/$path/RPMS
+    if [ -d $candidate ]; then
+        rpmsdir=$candidate
+        break
+    fi
+done
+
+if [ -z "$rpmsdir" ]; then
+    echo "Couldn't find RPMS dir in $buildroot; aborting." >&2
+    exit 1
+fi
+
+if [ -t 1 ]; then
+    echo "RPMS dir:"
+    echo "    $rpmsdir"
+fi
+
+cd "$rpmsdir"
+
+#filter='-debug(info|source)-'
+filter='will-never-match'
+rpms=( $( find -type f | egrep -v -- "$filter" ) )
+
+if [ -t 1 ]; then
+    echo
+    echo "Found rpms in buildroot:"
+    for rpm in "${rpms[@]}"; do
+        echo "    ${rpm}"
+    done
+else
+    for rpm in "${rpms[@]}"; do
+        echo "$rpmsdir/${rpm#./}"
+    done
+fi
