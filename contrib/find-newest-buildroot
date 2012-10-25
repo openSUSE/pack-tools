@@ -1,0 +1,7 @@
+#!/bin/bash
+
+# Find the most recently touched buildroot on the local system.
+
+find /var/tmp/build-root/ -maxdepth 2 -printf '%T@ %p\n' | \
+    sort -k1 -nr | head -n 1 | cut -d' ' -f2
+
