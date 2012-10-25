@@ -1,0 +1,168 @@
+#!/bin/bash
+#
+# Distribute the set of rpms most recently built via 'osc build' on
+# the local system to one or more remote hosts, and optionally install
+# them.  Useful for quick testing.
+
+me=`basename $0`
+
+usage () {
+    # Call as: usage [EXITCODE] [USAGE MESSAGE]
+    exit_code=1
+    if [[ "$1" == [0-9] ]]; then
+        exit_code="$1"
+        shift
+    fi
+    if [ -n "$1" ]; then
+        echo "$*" >&2
+        echo
+    fi
+
+    cat <<EOF >&2
+Usage: $me [options] HOST [HOST ...]
+Options:
+  -a, --add      Add rpms to existing install queue
+  -i, --install  Process install queue
+  -p, --proxy    Install via ssh/scp from a proxy host
+  -h, --help     Show this help
+EOF
+    exit "$exit_code"
+}
+
+parse_opts () {
+    delete=--delete
+    install=
+    proxy_host=
+    hosts=( )
+
+    while [ -n "$1" ]; do
+        case "$1" in
+            -h|--help)
+                usage 0
+                ;;
+            -a|--add)
+                delete=
+                shift
+                ;;
+            -i|--install)
+                install=yes
+                shift
+                ;;
+            -p|--proxy)
+                proxy_host="$2"
+                shift 2
+                ;;
+            *)
+                break
+                ;;
+        esac
+    done
+
+    if [ $# -lt 1 ]; then
+        usage "You must supply at least one target host."
+    fi
+
+    target_hosts=( "$@" )
+}
+
+safe_run () {
+    if ! "$@"; then
+        echo "Failed to run $*; aborting." >&2
+        exit 1
+    fi
+}
+
+dist_directly () {
+    for target_host in "${target_hosts[@]}"; do
+        echo -e "mkdir -p $rpms_rel_dir on ${target_host} ..."
+        safe_run ssh $target_host mkdir -p "$rpms_rel_dir"
+
+        echo -e "\nrsync $rpms_dir to ${target_host}:$rpms_rel_dir ...\n"
+        cd "$rpms_dir"
+        safe_run rsync -avR $delete . "${target_host}:$rpms_rel_dir"
+        
+        if [ -n "$install" ]; then
+            div
+
+            echo -e "Installing $arch_rpm on $target_host ...\n"
+            ssh $target_host "zypper -n in --force ./$rpms_rel_dir/*/*.rpm"
+        fi
+    done
+}
+
+dist_via_proxy () {
+    echo -e "rsync $rpms_dir to ${proxy_host}:$rpms_rel_dir ...\n"
+    cd "$rpms_dir"
+    safe_run rsync -avR $delete . "${proxy_host}:$rpms_rel_dir"
+
+    div
+
+    echo -e "rsync $rpms_rel_dir from $proxy_host to ${target_hosts[@]} ...\n"
+    safe_run ssh "$proxy_host" "
+        cd $rpms_rel_dir
+        
+        for target_host in ${target_hosts[@]}; do
+            ssh \$target_host mkdir -p $rpms_rel_dir
+            rsync -avR $delete . \${target_host}:$rpms_rel_dir
+        done"
+
+    if [ -n "$install" ]; then
+        div
+
+        echo -e "Installing $arch_rpm on ${target_hosts[@]} ...\n"
+        safe_run ssh "$proxy_host" "
+            for target_host in ${target_hosts[@]}; do
+                ssh \$target_host zypper -n in --force ./$rpms_rel_dir/*/*.rpm
+            done"
+    fi
+}
+
+main () {
+    parse_opts "$@"
+
+    # if [ $# = 0 ]; then
+         rpm_paths=( `find-buildroot-rpms` )
+    # else
+    #     rpm_paths=( "$@" )
+    # fi
+
+    if [ ${#rpm_paths[@]} = 0 ]; then
+        echo "No rpms found in buildroot!  Aborting." >&2
+        exit 1
+    fi
+
+    arch_rpm="${rpm_paths[0]#*/RPMS/}"
+    rpms_dir="${rpm_paths[0]%$arch_rpm}"
+
+    rpms_rel_dir=tmp/RPMS
+
+    if [ -z "$proxy_host" ]; then
+        dist_directly
+    else
+        dist_via_proxy
+    fi
+}
+
+# pscp () {
+#     # http://code.google.com/p/parallel-ssh/issues/detail?id=67
+#     export PSSH_OPTIONS='ControlPersist=no'
+#
+#     echo
+#     echo "Parallel scp'ing rpms ..."
+#     # while read host; do
+#     #     scp "${rpms[@]}" $host:/root
+#     # done < ~/HA/.pssh-hosts
+#     if ! pscp -v "$@" "${rpms[@]}" /root; then
+#         echo "pscp failed; aborting." >&2
+#         exit 1
+#     fi
+#
+#     if [ -n "$install" ]; then
+#         echo
+#         echo "Installing rpms ..."
+#         #pssh -i -v "$@" rpm -Uhv --force "${rpms[@]##*/}"
+#         pssh -i -v "$@" zypper -n in --force "${rpms[@]##*/}"
+#     fi
+# }
+
+main "$@"
