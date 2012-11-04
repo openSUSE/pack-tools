@@ -1,0 +1,156 @@
+#!/bin/bash
+#
+# Locally build one or more rpms via 'osc build' (for a single
+# repository/arch combination) from their package's working
+# directories locally checked out from a Build Service.
+#
+# Optionally switches the source service URL to consume local sources.
+# To enable this feature, you should ensure that an executable called
+# 'source-dir-for' is on your $PATH, which accepts a Build Service
+# working directory as the only parameter, and outputs the absolute
+# path of the corresponding locally checked out source repository,
+# which can then be consumed by the tar_scm source service.
+
+me=`basename $0`
+
+usage () {
+    # Call as: usage [EXITCODE] [USAGE MESSAGE]
+    exit_code=1
+    if [[ "$1" == [0-9] ]]; then
+        exit_code="$1"
+        shift
+    fi
+    if [ -n "$1" ]; then
+        echo "$*" >&2
+        echo
+    fi
+
+    cat <<EOF >&2
+Usage: $me [options] BSDIR [BSDIR ...]
+Options:
+  -l, --local-source     Switch tar_scm source service URL to file://SRCDIR
+                         as returned by 'source-dir-for BSDIR', and trigger
+                         osc service disabledrun
+  -r, --repository=REPO  Build for repository REPO
+  -a, --arch=ARCH        Build for arch ARCH
+  -o, --offline          (option passed to osc build)
+  -h, --help             Show this help
+EOF
+    exit "$exit_code"
+}
+
+parse_opts () {
+    local_source=
+    offline=
+
+    while [ -n "$1" ]; do
+        case "$1" in
+            -h|--help)
+                usage 0
+                ;;
+            -o)
+                offline=-o
+                shift
+                ;;
+            -l|--local-source)
+                local_source=y
+                shift
+                ;;
+            -r|--repository)
+                repository="$2"
+                shift 2
+                ;;
+            -a|--arch)
+                arch="$2"
+                shift 2
+                ;;
+            *)
+                break
+                ;;
+        esac
+    done
+
+    if [ $# = 0 ]; then
+        usage "You must specify at least one rpm to build."
+    fi
+
+    if [ -n "$arch" ] && [ -z "$repository" ]; then
+        usage "Cannot specify arch without repository."
+    fi
+
+    bs_dirs=( "$@" )
+}
+
+switch_source_service () {
+    local src_srv="$1" url="$2"
+
+    perl -Mstrict -wlni -e '
+      if (m!(\s*<param name="url">)(.+)(</param>)!) {
+          my $url = q{'$url'};
+          if ($2 ne $url) {
+              print "$1$url$3";
+              print STDERR "Switched repo from $2 to $url";
+          }
+          else {
+              print;
+              print STDERR "Using repo: $2";
+          }
+      }
+      else {
+        print
+      }' "$src_svc"
+}
+
+switch_package_source_service () {
+    local BS_pkg_dir="$1"
+    local src_svc="$BS_pkg_dir/_service"
+
+    if ! [ -e "$src_svc" ]; then
+        echo "Couldn't find source service at $src_svc; ignoring -s for $rpm"
+        return 1
+    fi
+
+    if ! src_dir=$( source-dir-for "$BS_pkg_dir" ); then
+        echo "Running source-dir-for $BS_pkg_dir failed; aborting." >&2
+        exit 1
+    fi
+
+    switch_source_service "$src_svc" "file://$src_dir"
+}
+
+build_rpm () {
+    local BS_pkg_dir="$1"
+
+    if [ ! -d "$BS_pkg_dir" ]; then
+        echo "$BS_pkg_dir does not exist; aborting." >&2
+        exit 1
+    fi
+
+    cd $BS_pkg_dir
+
+    if [ -n "$local_source" ]; then
+        if switch_package_source_service "$BS_pkg_dir"; then
+
+            echo
+            if ! osc service disabledrun; then
+                echo "disabledrun failed; aborting." >&2
+                exit 1
+            fi
+        fi
+    fi
+
+    if ! osc build $offline $repository $arch; then
+        echo "osc build failed; aborting." >&2
+        exit 1
+    fi
+}
+
+main () {
+    parse_opts "$@"
+
+    for bs_dir in "${bs_dirs[@]}"; do
+        build_rpm "$bs_dir"
+    done
+}
+
+main "$@"
