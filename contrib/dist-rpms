@@ -74,18 +74,19 @@ safe_run () {
 
 dist_directly () {
     for target_host in "${target_hosts[@]}"; do
+        target="root@$target_host"
         echo -e "mkdir -p $rpms_rel_dir on ${target_host} ..."
-        safe_run ssh $target_host mkdir -p "$rpms_rel_dir"
+        safe_run ssh $target mkdir -p "$rpms_rel_dir"
 
-        echo -e "\nrsync $rpms_dir to ${target_host}:$rpms_rel_dir ...\n"
+        echo -e "\nrsync $rpms_dir to ${target}:$rpms_rel_dir ...\n"
         cd "$rpms_dir"
-        safe_run rsync -avR $delete . "${target_host}:$rpms_rel_dir"
+        safe_run rsync -avR $delete . "${target}:$rpms_rel_dir"
         
         if [ -n "$install" ]; then
             div
 
             echo -e "Installing $arch_rpm on $target_host ...\n"
-            ssh $target_host "zypper -n in --force ./$rpms_rel_dir/*/*.rpm"
+            ssh $target "zypper -n in --force ./$rpms_rel_dir/*/*.rpm"
         fi
     done
 }
@@ -102,8 +103,9 @@ dist_via_proxy () {
         cd $rpms_rel_dir
         
         for target_host in ${target_hosts[@]}; do
-            ssh \$target_host mkdir -p $rpms_rel_dir
-            rsync -avR $delete . \${target_host}:$rpms_rel_dir
+            target=\"root@$target_host\"
+            ssh \$target mkdir -p $rpms_rel_dir
+            rsync -avR $delete . \${target}:$rpms_rel_dir
         done"
 
     if [ -n "$install" ]; then
@@ -112,7 +114,8 @@ dist_via_proxy () {
         echo -e "Installing $arch_rpm on ${target_hosts[@]} ...\n"
         safe_run ssh "$proxy_host" "
             for target_host in ${target_hosts[@]}; do
-                ssh \$target_host zypper -n in --force ./$rpms_rel_dir/*/*.rpm
+                target=\"root@$target_host\"
+                ssh \$target zypper -n in --force ./$rpms_rel_dir/*/*.rpm
             done"
     fi
 }
