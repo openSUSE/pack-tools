@@ -8,8 +8,7 @@
 #check if we are in osc directory
 if [ ! -e .osc/_package ]
 then
-	echo "ERROR: not in osc package directory"
-	exit 1
+	echo "WARNING: not in osc package directory"
 fi
 
 gzip_define="__gzip function takefirst { [[ \$2 =~ \".patch.\" || \$2 =~ \".dif.\" || \$2 =~ \".diff.\" ]] && basename \"\$2\" || gzip \$@ ; } ; takefirst"
@@ -54,6 +53,13 @@ then
 	spec="$1"
 else
 	spec=$(cat .osc/_package | sed 's/\..*//').spec
+fi
+
+# still no spec, so last try is to take one from the current directory
+if [ -z "$spec" -o ! -e "$spec" ]
+then
+	# use first .spec that we find
+	spec=$(ls *.spec | sed 's/\..*//').spec
 fi
 
 if [ -z "$spec" -o ! -e "$spec" ] 
