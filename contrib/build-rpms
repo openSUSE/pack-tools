@@ -101,6 +101,11 @@ switch_source_service () {
       }' "$src_svc"
 }
 
+die () {
+    echo "$*; aborting." >&2
+    exit 1
+}
+
 switch_package_source_service () {
     local BS_pkg_dir="$1"
     local src_svc="$BS_pkg_dir/_service"
@@ -111,8 +116,7 @@ switch_package_source_service () {
     fi
 
     if ! src_dir=$( source-dir-for "$BS_pkg_dir" ); then
-        echo "Running source-dir-for $BS_pkg_dir failed; aborting." >&2
-        exit 1
+        die "Running source-dir-for $BS_pkg_dir failed; aborting."
     fi
 
     switch_source_service "$src_svc" "file://$src_dir"
@@ -122,8 +126,7 @@ build_rpm () {
     local BS_pkg_dir="$1"
 
     if [ ! -d "$BS_pkg_dir" ]; then
-        echo "$BS_pkg_dir does not exist; aborting." >&2
-        exit 1
+        die "$BS_pkg_dir does not exist; aborting."
     fi
 
     cd $BS_pkg_dir
@@ -133,15 +136,13 @@ build_rpm () {
 
             echo
             if ! osc service disabledrun; then
-                echo "disabledrun failed; aborting." >&2
-                exit 1
+                die "disabledrun failed; aborting."
             fi
         fi
     fi
 
     if ! osc build $offline $repository $arch; then
-        echo "osc build failed; aborting." >&2
-        exit 1
+        die "osc build failed; aborting."
     fi
 }
 
