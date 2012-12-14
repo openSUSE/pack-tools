@@ -28,9 +28,9 @@ usage () {
     cat <<EOF >&2
 Usage: $me [options] BSDIR [BSDIR ...]
 Options:
+  -d, --disabledrun      Run \`osc service disabledrun' before build
   -l, --local-source     Switch tar_scm source service URL to file://SRCDIR
-                         as returned by 'source-dir-for BSDIR', and trigger
-                         osc service disabledrun
+                         as returned by 'source-dir-for BSDIR'.  Implies -d.
   -r, --repository=REPO  Build for repository REPO
   -a, --arch=ARCH        Build for arch ARCH
   -o, --offline          (option passed to osc build)
@@ -40,6 +40,7 @@ EOF
 }
 
 parse_opts () {
+    disabledrun=
     local_source=
     offline=
 
@@ -52,8 +53,13 @@ parse_opts () {
                 offline=-o
                 shift
                 ;;
+            -d|--disabledrun)
+                disabledrun=y
+                shift
+                ;;
             -l|--local-source)
                 local_source=y
+                disabledrun=y
                 shift
                 ;;
             -r|--repository)
@@ -132,12 +138,14 @@ build_rpm () {
     cd $BS_pkg_dir
 
     if [ -n "$local_source" ]; then
-        if switch_package_source_service "$BS_pkg_dir"; then
+        if ! switch_package_source_service "$BS_pkg_dir"; then
+            die "Failed to switch source service for $BS_pkg_dir"
+        fi
+    fi
 
-            echo
-            if ! osc service disabledrun; then
-                die "disabledrun failed; aborting."
-            fi
+    if [ -n "$disabledrun" ]; then
+        if ! osc service disabledrun; then
+            die "disabledrun failed; aborting."
         fi
     fi
 
