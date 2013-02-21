@@ -113,7 +113,7 @@ test -e patches && echo \"patches_$salt_patches\" >> .pc/.quilt_patches ; \
 test -e series && echo \"series_$salt_series\" >> .pc/.quilt_series ; \
 test -e series_tmp_$salt && \
 cat series_tmp_$salt | \
-sed  -e 's/-s//' -e 's/-b --suffix .* //' -e 's/ -E//' | \
+sed  -e 's/\<-s\>//' -e 's/-b --suffix .* //' -e 's/\<-E\>//' | \
 sed s/--fuzz=.// | tr -s ' ' | \
 awk 'BEGIN {FS=OFS=\" \"} {temp=\$1; \$1=\$2; \$2=temp} {print}' > pkg_series_$salt && \
 quilt setup --fuzz=0 \$PWD/pkg_series_$salt ; \
