@@ -11,7 +11,7 @@ function check_dir()
 	#get results from osc, 5. column contains status message
 	#exclude excluded status and merge repeating into one
 	_results=$(mktemp)
-	osc r --csv "$archopt$repoopt" | cut -d '|' -f 5 | grep -v excluded | grep -v disabled |  sort -u > $_results
+	osc r --csv $archopt$repoopt | cut -d '|' -f 5 | grep -v excluded | grep -v disabled |  sort -u > $_results
 	
 	cat $_results
 	
