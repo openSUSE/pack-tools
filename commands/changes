@@ -1,0 +1,78 @@
+#!/bin/sh
+
+#TODO: add to main pck command
+#TODO: mktemp probably useless with osc vc
+function usage {
+	printf "usage: $0 [ -p package_name ] [ -c new_changelog_entry_file ] [ -n keep_as_filename ]\n"
+	exit 1
+}
+
+function cleanup {
+	rm -f $NEW_CHANGES
+
+	#case "$KEEP_NEW_ENTRY" in
+	#"") # don't keep the new entry file
+		#rm -f $NEW_ENTRY_FILE
+		#;;
+	#"_yes_") # keep it as its current name
+		#printf "Keeping new hangelog entry as $NEW_ENTRY_FILE"
+		#;;
+	#*)
+		#mv $NEW_ENTRY_FILE $KEEP_NEW_ENTRY
+		#printf "Keeping new hangelog entry as $KEEP_NEW_ENTRY"
+		#;;
+	#esac
+}
+
+trap cleanup SIGINT SIGTERM
+
+while getopts "p:c:n:" opt; do
+	case "$opt" in
+	p) # package name
+		PKG="$OPTARG"
+		;;
+	c) # file with the new changelog entry
+		NEW_ENTRY_FILE="$OPTARG"
+		;;
+	n) # keep the new changelog entry file on exit
+		KEEP_NEW_ENTRY="$OPTARG"
+		;;
+	\?) # unknown flag
+		usage
+	esac
+done
+
+if [ -z "$PKG" ]; then
+	PKG=$(basename $PWD)
+fi
+
+CHANGES=$PKG.changes
+
+if [ -z "$NEW_ENTRY_FILE" ]; then
+	# TODO: this is silly
+	NEW_ENTRY_FILE=$(basename $(mktemp -u))
+	NEW_ENTRY_FILE_CREATED="yes"
+	osc vc $NEW_ENTRY_FILE
+	RANDOM_ENTRY_FILE="yes"
+
+	# osc vc appends ".changes" to the filename
+	NEW_ENTRY_FILE=$NEW_ENTRY_FILE.changes
+fi
+
+if [ ! -s $NEW_ENTRY_FILE ]; then
+	printf "New changelog entry is empty\n"
+	exit 1
+fi
+
+NEW_CHANGES=$(mktemp)
+cat $NEW_ENTRY_FILE $CHANGES > $NEW_CHANGES
+mv $NEW_CHANGES $CHANGES
+
+# rename the entry file if desired
+if [ -n "$KEEP_NEW_ENTRY" ]; then
+	mv $NEW_ENTRY_FILE $KEEP_NEW_ENTRY
+elif [ -n "$NEW_ENTRY_FILE_CREATED" ]; then
+	rm -f $NEW_ENTRY_FILE
+fi
+
+cleanup
