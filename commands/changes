@@ -4,7 +4,7 @@
 #TODO: we can't handle filenames with spaces inside
 
 function usage {
-	printf "usage: $0 [ -p package_name ] [ -c new_changelog_entry_file | -n keep_as_filename ]\n"
+	printf "usage: $0 [ -c file.changes ] [ -n new_entry_file ] [ -s save_as_filename ]\n"
 	exit 1
 }
 
@@ -17,37 +17,31 @@ function cleanup {
 
 trap cleanup SIGINT SIGTERM
 
-while getopts "p:c:n:" opt; do
+while getopts "c:n:s:" opt; do
 	case "$opt" in
-	p) # package name
-		PKG="$OPTARG"
+	c) # .changes file name
+		CHANGES="$OPTARG"
 		;;
-	c) # file with the new changelog entry
+	n) # file with the new changelog entry
 		ENTRY_FILE="$OPTARG"
 		;;
-	n) # name for the new changelog entry file
-		KEEP_NEW_ENTRY="$OPTARG"
+	s) # name under which the new changelog entry file will be saved
+		SAVE_ENTRY="$OPTARG"
 		;;
 	\?) # unknown flag
 		usage
 	esac
 done
 
-if [ -z "$PKG" ]; then
-	PKG=$(basename $PWD)
-fi
-
-CHANGES=$PKG.changes
-
-# if no package name was specified on the command line,
+# if no .changes file was specified on the command line,
 # we take the first .changes file we can find
 if [ ! -s "$CHANGES" ]; then
 	CHANGES=$(ls -1 *.changes | head -n 1)
-	printf "Using $CHANGES as .changes file. You can override it with -p.\n"
+	printf "Using $CHANGES as .changes file. You can override it with -c.\n"
 fi
 
 if [ ! -s "$CHANGES" ]; then
-	printf "Can't find .changes file. Specify package name with -p.\n"
+	printf "Can't find .changes file. Specify package name with -c.\n"
 	exit 1
 fi
 
@@ -72,8 +66,8 @@ cat $ENTRY_FILE $CHANGES > $NEW_CHANGES
 mv $NEW_CHANGES $CHANGES
 
 # rename the entry file
-if [ -n "$KEEP_NEW_ENTRY" ]; then
-	mv -f $ENTRY_FILE $KEEP_NEW_ENTRY
+if [ -n "$SAVE_ENTRY" ]; then
+	mv -f $ENTRY_FILE $SAVE_ENTRY
 fi
 
 cleanup
