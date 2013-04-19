@@ -1,6 +1,5 @@
 #!/bin/sh
 
-#TODO: add to main pck command
 #TODO: mktemp probably useless with osc vc
 function usage {
 	printf "usage: $0 [ -p package_name ] [ -c new_changelog_entry_file ] [ -n keep_as_filename ]\n"
@@ -9,19 +8,6 @@ function usage {
 
 function cleanup {
 	rm -f $NEW_CHANGES
-
-	#case "$KEEP_NEW_ENTRY" in
-	#"") # don't keep the new entry file
-		#rm -f $NEW_ENTRY_FILE
-		#;;
-	#"_yes_") # keep it as its current name
-		#printf "Keeping new hangelog entry as $NEW_ENTRY_FILE"
-		#;;
-	#*)
-		#mv $NEW_ENTRY_FILE $KEEP_NEW_ENTRY
-		#printf "Keeping new hangelog entry as $KEEP_NEW_ENTRY"
-		#;;
-	#esac
 }
 
 trap cleanup SIGINT SIGTERM
@@ -34,7 +20,7 @@ while getopts "p:c:n:" opt; do
 	c) # file with the new changelog entry
 		NEW_ENTRY_FILE="$OPTARG"
 		;;
-	n) # keep the new changelog entry file on exit
+	n) # name for the new changelog entry file
 		KEEP_NEW_ENTRY="$OPTARG"
 		;;
 	\?) # unknown flag
@@ -47,6 +33,17 @@ if [ -z "$PKG" ]; then
 fi
 
 CHANGES=$PKG.changes
+# if no package name was specified on the command line,
+# take the first .changes file we can find
+if [ ! -s "$CHANGES" ]; then
+	CHANGES=$(ls -1 *.changes | head -n 1)
+	printf "Using $CHANGES file. You can override it with -p.\n"
+fi
+
+if [ ! -s "$CHANGES" ]; then
+	printf "Can't find .changes file. Specify package name with -p.\n"
+	exit 1
+fi
 
 if [ -z "$NEW_ENTRY_FILE" ]; then
 	# TODO: this is silly
