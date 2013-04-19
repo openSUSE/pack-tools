@@ -22,12 +22,14 @@ function pkg_list
 	echo "  spec:specfile management - get/set tags, merge conflicting specfile, add patch"
 	echo "  getpac:download packages for all or only some products, delete unwanted before checkout"
 	echo "  patchinfo:fixed patchinfo, opens editor every time"
-	echo "  clean:recursive submit request - first submit to devel project and if everything goes well, submit to factory"
+	echo "  bubble:recursive submit request - first submit to devel project and if everything goes well, submit to factory"
+	echo "  changes: add a changelog entry to .changes"
+	echo "  wfb: wait for successful build results"
 	exit 1
 }
 
 #check for 0 args, then print help
-if [ "$#" = "0" ] 
+if [ "$#" = "0" ]
 then
 	pkg_help
 fi
@@ -47,7 +49,7 @@ let k=i-1
 verbose=no
 
 #save arguments for subcommand
-if [ -n "$subcommand" ] 
+if [ -n "$subcommand" ]
 then
 #FIXME: this breaks escaped arguments - like 'foo "x y"' will end in two arguments 'x' and 'y'
 	subargs=${@:$i:$#}
@@ -81,8 +83,8 @@ done
 #check if any subcommand
 
 #echo "'$subargs'"
-if [ -z "$subargs" ] 
-then 
+if [ -z "$subargs" ]
+then
 	exit 0
 fi
 
