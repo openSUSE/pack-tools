@@ -1,13 +1,18 @@
 #!/bin/sh
 
-#TODO: mktemp probably useless with osc vc
+#TODO: perhaps there's easier way to do this with osc vc
+#TODO: we can't handle filenames with spaces inside
+
 function usage {
-	printf "usage: $0 [ -p package_name ] [ -c new_changelog_entry_file ] [ -n keep_as_filename ]\n"
+	printf "usage: $0 [ -p package_name ] [ -c new_changelog_entry_file | -n keep_as_filename ]\n"
 	exit 1
 }
 
 function cleanup {
 	rm -f $NEW_CHANGES
+	if [ -n "$TEMP_ENTRY_FILE" ]; then
+		rm -f $ENTRY_FILE
+	fi
 }
 
 trap cleanup SIGINT SIGTERM
@@ -18,7 +23,7 @@ while getopts "p:c:n:" opt; do
 		PKG="$OPTARG"
 		;;
 	c) # file with the new changelog entry
-		NEW_ENTRY_FILE="$OPTARG"
+		ENTRY_FILE="$OPTARG"
 		;;
 	n) # name for the new changelog entry file
 		KEEP_NEW_ENTRY="$OPTARG"
@@ -33,11 +38,12 @@ if [ -z "$PKG" ]; then
 fi
 
 CHANGES=$PKG.changes
+
 # if no package name was specified on the command line,
-# take the first .changes file we can find
+# we take the first .changes file we can find
 if [ ! -s "$CHANGES" ]; then
 	CHANGES=$(ls -1 *.changes | head -n 1)
-	printf "Using $CHANGES file. You can override it with -p.\n"
+	printf "Using $CHANGES as .changes file. You can override it with -p.\n"
 fi
 
 if [ ! -s "$CHANGES" ]; then
@@ -45,31 +51,29 @@ if [ ! -s "$CHANGES" ]; then
 	exit 1
 fi
 
-if [ -z "$NEW_ENTRY_FILE" ]; then
-	# TODO: this is silly
-	NEW_ENTRY_FILE=$(basename $(mktemp -u))
-	NEW_ENTRY_FILE_CREATED="yes"
-	osc vc $NEW_ENTRY_FILE
-	RANDOM_ENTRY_FILE="yes"
+# create a temporary file if we didn't get a name on command line
+if [ -z "$ENTRY_FILE" ]; then
+	ENTRY_FILE=$(mktemp)
+	TEMP_ENTRY_FILE="yes"
 
-	# osc vc appends ".changes" to the filename
-	NEW_ENTRY_FILE=$NEW_ENTRY_FILE.changes
+	# osc vc appends .changes to the filename if it doesn't end with it
+	osc vc $ENTRY_FILE
+	#TODO check whether $ENTRY_FILE already ends with .changes
+	ENTRY_FILE=$ENTRY_FILE.changes
 fi
 
-if [ ! -s $NEW_ENTRY_FILE ]; then
+if [ ! -s "$ENTRY_FILE" ]; then
 	printf "New changelog entry is empty\n"
 	exit 1
 fi
 
 NEW_CHANGES=$(mktemp)
-cat $NEW_ENTRY_FILE $CHANGES > $NEW_CHANGES
+cat $ENTRY_FILE $CHANGES > $NEW_CHANGES
 mv $NEW_CHANGES $CHANGES
 
-# rename the entry file if desired
+# rename the entry file
 if [ -n "$KEEP_NEW_ENTRY" ]; then
-	mv $NEW_ENTRY_FILE $KEEP_NEW_ENTRY
-elif [ -n "$NEW_ENTRY_FILE_CREATED" ]; then
-	rm -f $NEW_ENTRY_FILE
+	mv -f $ENTRY_FILE $KEEP_NEW_ENTRY
 fi
 
 cleanup
