@@ -117,7 +117,7 @@ switch_package_source_service () {
     local src_svc="$BS_pkg_dir/_service"
 
     if ! [ -e "$src_svc" ]; then
-        echo "Couldn't find source service at $src_svc; ignoring -s for $rpm"
+        echo "Couldn't find source service at $src_svc; ignoring -l for $rpm"
         return 1
     fi
 
