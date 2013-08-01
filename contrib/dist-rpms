@@ -21,10 +21,12 @@ usage () {
     cat <<EOF >&2
 Usage: $me [options] HOST [HOST ...]
 Options:
-  -a, --add      Add rpms to existing install queue
-  -i, --install  Process install queue
-  -p, --proxy    Install via ssh/scp from a proxy host
-  -h, --help     Show this help
+  -a, --add           Add rpms to existing install queue
+  -d, --dir=DIR       Use rpms from DIR not from buildroot
+                      (can be repeated)
+  -i, --install       Process install queue
+  -p, --proxy=PROXY   Install via ssh/scp from a proxy host
+  -h, --help          Show this help
 EOF
     exit "$exit_code"
 }
@@ -34,6 +36,7 @@ parse_opts () {
     install=
     proxy_host=
     hosts=( )
+    rpm_dirs=( )
 
     while [ -n "$1" ]; do
         case "$1" in
@@ -44,6 +47,14 @@ parse_opts () {
                 delete=
                 shift
                 ;;
+            -d|--dir)
+                rpm_paths=( `find "$2" -name \*.rpm` )
+                if [ ${#rpm_paths[@]} = 0 ]; then
+                    usage "No rpms found in $2."
+                fi
+                rpm_dirs+=( "$2" )
+                shift 2
+                ;;
             -i|--install)
                 install=yes
                 shift
@@ -52,11 +63,24 @@ parse_opts () {
                 proxy_host="$2"
                 shift 2
                 ;;
+            -*)
+                usage "Unrecognised option: $1"
+                ;;
             *)
                 break
                 ;;
         esac
     done
+
+    if [ ${#rpm_dirs[@]} = 0 ]; then
+        rpm_dirs=( `find-buildroot-rpms --dir-only` )
+        rpm_paths=( `find-buildroot-rpms --relative` )
+    fi
+
+    if [ ${#rpm_paths[@]} = 0 ]; then
+        echo "No rpms found in buildroot!  Aborting." >&2
+        exit 1
+    fi
 
     if [ $# -lt 1 ]; then
         usage "You must supply at least one target host."
@@ -73,76 +97,78 @@ safe_run () {
 }
 
 dist_directly () {
-    for target_host in "${target_hosts[@]}"; do
-        target="root@$target_host"
-        echo -e "mkdir -p $rpms_rel_dir on ${target_host} ..."
-        safe_run ssh $target mkdir -p "$rpms_rel_dir"
+    echo -e "ssh $target mkdir -p $rpms_rel_dest_dir ..."
+    safe_run ssh $target mkdir -p "$rpms_rel_dest_dir"
 
-        echo -e "\nrsync $rpms_dir to ${target}:$rpms_rel_dir ...\n"
+    for rpms_dir in "${rpm_dirs[@]}"; do
+        echo -e "\nrsync $rpms_dir/ to ${target}:$rpms_rel_dest_dir ...\n"
         cd "$rpms_dir"
-        safe_run rsync -avR $delete . "${target}:$rpms_rel_dir"
-        
-        if [ -n "$install" ]; then
-            div
-
-            echo -e "Installing $arch_rpm on $target_host ...\n"
-            ssh $target "zypper -n in --force ./$rpms_rel_dir/*/*.rpm"
-        fi
+        safe_run rsync -avR $delete ./ "${target}:$rpms_rel_dest_dir"
     done
 }
 
-dist_via_proxy () {
-    echo -e "rsync $rpms_dir to ${proxy_host}:$rpms_rel_dir ...\n"
+install_directly () {
+    echo -e "Installing on $target_host ...\n"
+    safe_run ssh $target "find $rpms_rel_dest_dir -name '*.rpm' | xargs zypper -n in --force"
+}
+
+dist_dir_via_proxy () {
+    rpms_dir="$1"
+    echo -e "rsync $rpms_dir/ to ${proxy_host}:$rpms_rel_dest_dir ...\n"
     cd "$rpms_dir"
-    safe_run rsync -avR $delete . "${proxy_host}:$rpms_rel_dir"
+    safe_run rsync -avR $delete ./ "${proxy_host}:$rpms_rel_dest_dir"
+}
+
+dist_via_proxy () {
+    for rpms_dir in "${rpm_dirs[@]}"; do
+        dist_dir_via_proxy "$rpms_dir"
+    done
 
     div
 
-    echo -e "rsync $rpms_rel_dir from $proxy_host to ${target_hosts[@]} ...\n"
+    echo -e "rsync $rpms_rel_dest_dir/ from $proxy_host to ${target_hosts[@]} ...\n"
     safe_run ssh "$proxy_host" "
-        cd $rpms_rel_dir
+        cd $rpms_rel_dest_dir
         
         for target_host in ${target_hosts[@]}; do
-            target=\"root@$target_host\"
-            ssh \$target mkdir -p $rpms_rel_dir
-            rsync -avR $delete . \${target}:$rpms_rel_dir
+            target=\"root@\$target_host\"
+            ssh \$target mkdir -p $rpms_rel_dest_dir
+            rsync -avR $delete ./ \${target}:$rpms_rel_dest_dir
         done"
+}
 
-    if [ -n "$install" ]; then
-        div
-
-        echo -e "Installing $arch_rpm on ${target_hosts[@]} ...\n"
-        safe_run ssh "$proxy_host" "
-            for target_host in ${target_hosts[@]}; do
-                target=\"root@$target_host\"
-                ssh \$target zypper -n in --force ./$rpms_rel_dir/*/*.rpm
-            done"
-    fi
+install_via_proxy () {
+    target_host="$1"
+    echo -e "Installing on ${target_hosts[@]} ...\n"
+    safe_run ssh "$proxy_host" "
+        for target_host in ${target_hosts[@]}; do
+            target=\"root@\$target_host\"
+            ssh \$target 'find $rpms_rel_dest_dir -name \\*.rpm | xargs zypper -n in --force'
+        done"
 }
 
 main () {
     parse_opts "$@"
 
-    # if [ $# = 0 ]; then
-         rpm_paths=( `find-buildroot-rpms` )
-    # else
-    #     rpm_paths=( "$@" )
-    # fi
-
-    if [ ${#rpm_paths[@]} = 0 ]; then
-        echo "No rpms found in buildroot!  Aborting." >&2
-        exit 1
-    fi
-
-    arch_rpm="${rpm_paths[0]#*/RPMS/}"
-    rpms_dir="${rpm_paths[0]%$arch_rpm}"
-
-    rpms_rel_dir=tmp/RPMS
+    rpms_rel_dest_dir=tmp/RPMS
 
     if [ -z "$proxy_host" ]; then
-        dist_directly
+        for target_host in "${target_hosts[@]}"; do
+            target="root@$target_host"
+            dist_directly
+
+            if [ -n "$install" ]; then
+                div
+                install_directly
+            fi
+        done
     else
         dist_via_proxy
+
+        if [ -n "$install" ]; then
+            div
+            install_via_proxy
+        fi
     fi
 }
 
