@@ -13,67 +13,120 @@ usage () {
         shift
     fi
     if [ -n "$1" ]; then
-        echo "$*" >&2
+        echo >&2 "$*"
         echo
     fi
 
+    me=`basename $0`
+
     cat <<EOF >&2
-Usage: $me
+Usage: $me [options]
+Options:
+  -h, --help       Show this help and exit
+  -d, --dir-only   Only output rpm directory
+  -l, --line-mode  Show full paths to each rpm, one per line
+  -r, --relative   Show relative paths to each rpm, one per line
+                   (relative to rpm directory)
 EOF
     exit "$exit_code"
 }
 
-if [ "$1" == '--help' ]; then
-    usage 0
-fi
+parse_opts () {
+    show_rpms_dir=
+    line_mode=
+    relative=
 
-if [ $# -gt 0 ]; then
-    usage
-fi
+    while [ $# != 0 ]; do
+        case "$1" in
+            -h|--help)
+                usage 0
+                ;;
+            -d|--dir-only)
+                show_rpms_dir=y
+                shift
+                ;;
+            -l|--line-mode)
+                line_mode=y
+                shift
+                ;;
+            -r|--relative)
+                relative=y
+                shift
+                ;;
+            -*)
+                usage "Unrecognised option: $1"
+                ;;
+            *)
+                break
+                ;;
+        esac
+    done
 
-if ! buildroot=`find-newest-buildroot`; then
-    echo "Failed to find newest buildroot" >&2
-    exit 1
-fi
-
-if [ -t 1 ]; then
-    echo "Newest buildroot:"
-    echo "    $buildroot"
-fi
-
-rpmsdir=
-for path in home/abuild/rpmbuild usr/src/packages; do
-    candidate=$buildroot/$path/RPMS
-    if [ -d $candidate ]; then
-        rpmsdir=$candidate
-        break
+    if [ $# -gt 0 ] || [ -n "$show_rpms_dir" -a -n "$line_mode" -a -n "$relative" ]; then
+        usage
     fi
-done
 
-if [ -z "$rpmsdir" ]; then
-    echo "Couldn't find RPMS dir in $buildroot; aborting." >&2
-    exit 1
-fi
+    ARGV=( "$@" )
+}
 
-if [ -t 1 ]; then
-    echo "RPMS dir:"
-    echo "    $rpmsdir"
-fi
+find_rpms_dir () {
+    if ! buildroot=`find-newest-buildroot`; then
+        echo "Failed to find newest buildroot" >&2
+        exit 1
+    fi
 
-cd "$rpmsdir"
-
-#filter='-debug(info|source)-'
-filter='will-never-match'
-rpms=( $( find -type f | egrep -v -- "$filter" ) )
-
-if [ -t 1 ]; then
-    echo
-    echo "Found rpms in buildroot:"
-    for rpm in "${rpms[@]}"; do
-        echo "    ${rpm}"
+    rpms_dir=
+    for path in home/abuild/rpmbuild usr/src/packages; do
+        candidate=$buildroot/$path/RPMS
+        if [ -d $candidate ]; then
+            rpms_dir=$candidate
+            break
+        fi
     done
-else
-    for rpm in "${rpms[@]}"; do
-        echo "$rpmsdir/${rpm#./}"
-    done
-fi
+
+    if [ -z "$rpms_dir" ]; then
+        echo "Couldn't find RPMS dir in $buildroot; aborting." >&2
+        exit 1
+    fi
+}
+
+find_rpms () {
+    cd "$rpms_dir"
+
+    #filter='-debug(info|source)-'
+    filter='will-never-match'
+    rpms=( $( find -type f | egrep -v -- "$filter" ) )
+}
+
+output () {
+    if [ -n "$show_rpms_dir" ]; then
+        echo "$rpms_dir"
+    elif [ -n "$relative" ]; then
+        for rpm in "${rpms[@]}"; do
+            echo "${rpm#./}"
+        done
+    elif [ -t 1 ] && ! [ -n "$line_mode" ]; then
+        echo "Newest buildroot:"
+        echo "    $buildroot"
+        echo "RPMS dir:"
+        echo "    $rpms_dir"
+        echo
+        echo "Found rpms in buildroot:"
+        for rpm in "${rpms[@]}"; do
+            echo "    ${rpm}"
+        done
+    else
+        for rpm in "${rpms[@]}"; do
+            echo "$rpms_dir/${rpm#./}"
+        done
+    fi
+}
+
+main () {
+    parse_opts "$@"
+    find_rpms_dir
+    find_rpms
+    output
+}
+
+main "$@"
