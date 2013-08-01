@@ -149,9 +149,15 @@ build_rpm () {
         fi
     fi
 
-    if ! osc build $offline $repository $arch; then
+    d="${BS_pkg_dir#$HOME/}"
+    rpm_out_dir="$HOME/tmp/build-rpms/${d//\//_}"
+
+    mkdir -p "$rpm_out_dir"
+    if ! osc build -k "$rpm_out_dir" $offline $repository $arch; then
         die "osc build failed; aborting."
     fi
+
+    echo "rpms saved in $rpm_out_dir"
 }
 
 main () {
