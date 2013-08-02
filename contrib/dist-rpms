@@ -96,6 +96,11 @@ safe_run () {
     fi
 }
 
+rsync_to () {
+    local target="$1"
+    safe_run rsync "${rsync_opts[@]}" ./ "$target"
+}
+
 dist_directly () {
     echo -e "ssh $target mkdir -p $rpms_rel_dest_dir ..."
     safe_run ssh $target mkdir -p "$rpms_rel_dest_dir"
@@ -103,20 +108,21 @@ dist_directly () {
     for rpms_dir in "${rpm_dirs[@]}"; do
         echo -e "\nrsync $rpms_dir/ to ${target}:$rpms_rel_dest_dir ...\n"
         cd "$rpms_dir"
-        safe_run rsync -avR $delete ./ "${target}:$rpms_rel_dest_dir"
+        rsync_to "${target}:$rpms_rel_dest_dir"
     done
 }
 
 install_directly () {
     echo -e "Installing on $target_host ...\n"
-    safe_run ssh $target "find $rpms_rel_dest_dir -name '*.rpm' | xargs zypper -n in --force"
+    safe_run ssh $target \
+        "find $rpms_rel_dest_dir -name '*.rpm' | xargs zypper -n in --force"
 }
 
 dist_dir_via_proxy () {
     rpms_dir="$1"
     echo -e "rsync $rpms_dir/ to ${proxy_host}:$rpms_rel_dest_dir ...\n"
     cd "$rpms_dir"
-    safe_run rsync -avR $delete ./ "${proxy_host}:$rpms_rel_dest_dir"
+    rsync_to "${proxy_host}:$rpms_rel_dest_dir"
 }
 
 dist_via_proxy () {
@@ -133,7 +139,7 @@ dist_via_proxy () {
         for target_host in ${target_hosts[@]}; do
             target=\"root@\$target_host\"
             ssh \$target mkdir -p $rpms_rel_dest_dir
-            rsync -avR $delete ./ \${target}:$rpms_rel_dest_dir
+            rsync ${rsync_opts[@]} ./ \${target}:$rpms_rel_dest_dir
         done"
 }
 
@@ -151,6 +157,13 @@ main () {
     parse_opts "$@"
 
     rpms_rel_dest_dir=tmp/RPMS
+
+    rsync_opts=(
+        -avR
+        $delete
+        --exclude='*-devel-*.noarch.rpm'
+        --exclude='*.src.rpm'
+    )
 
     if [ -z "$proxy_host" ]; then
         for target_host in "${target_hosts[@]}"; do
