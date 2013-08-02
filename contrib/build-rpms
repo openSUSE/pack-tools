@@ -114,6 +114,11 @@ tweak_source_service () {
         return 1
     fi
 
+    if ! src_svc_temp=$( mktemp "${src_svc}.build-rpms.XXXXXXXX" ); then
+        die "Couldn't make temporary backup of $src_svc"
+    fi
+    cp "$src_svc" "$src_svc_temp"
+
     if [ -n "$local_source" ]; then
         if ! switch_source_service_url "$BS_pkg_dir"; then
             die "Failed to switch source service for $BS_pkg_dir"
@@ -193,6 +198,10 @@ build_rpm () {
         if ! osc service disabledrun; then
             die "disabledrun failed; aborting."
         fi
+    fi
+
+    if [ -e "$src_svc_temp" ]; then
+        mv "$src_svc_temp" "$src_svc"
     fi
 
     d="${BS_pkg_dir#$HOME/}"
