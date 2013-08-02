@@ -221,6 +221,7 @@ main () {
     parse_opts "$@"
 
     for bs_dir in "${bs_dirs[@]}"; do
+        bs_dir=$( cd "$bs_dir" && pwd ) || die "Invalid directory $bs_dir"
         build_rpm "$bs_dir"
     done
 }
