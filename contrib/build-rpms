@@ -28,11 +28,13 @@ usage () {
     cat <<EOF >&2
 Usage: $me [options] BSDIR [BSDIR ...]
 Options:
+  -c, --command=COMMAND  Run COMMAND before build
   -d, --disabledrun      Run \`osc service disabledrun' before build
   -l, --local-source     Switch tar_scm source service url to file://SRCDIR
-                         as returned by 'source-dir-for BSDIR'.  Implies -d.
+                         as returned by 'source-dir-for BSDIR'.  Implies -d
+                         unless -c is also specified.
   -r, --revision=REV     Switch tar_scm source service revision to REV.
-                         Implies -d.
+                         Implies -d unless -c is also specified.
   -R, --repository=REPO  Build for repository REPO
   -a, --arch=ARCH        Build for arch ARCH
   -o, --offline          (option passed to osc build)
@@ -42,6 +44,7 @@ EOF
 }
 
 parse_opts () {
+    command=
     disabledrun=
     local_source=
     offline=
@@ -56,18 +59,20 @@ parse_opts () {
                 offline=-o
                 shift
                 ;;
+            -c|--command)
+                command="$2"
+                shift 2
+                ;;
             -d|--disabledrun)
                 disabledrun=y
                 shift
                 ;;
             -l|--local-source)
                 local_source=y
-                disabledrun=y
                 shift
                 ;;
             -r|--revision)
                 revision="$2"
-                disabledrun=y
                 shift 2
                 ;;
             -R|--repository)
@@ -90,6 +95,12 @@ parse_opts () {
 
     if [ -n "$arch" ] && [ -z "$repository" ]; then
         usage "Cannot specify arch without repository."
+    fi
+
+    if [ -z "$command" ]; then
+        if [ -n "$local_source" ] || [ -n "$revision" ]; then
+            disabledrun=y
+        fi
     fi
 
     bs_dirs=( "$@" )
@@ -197,6 +208,12 @@ build_rpm () {
     if [ -n "$disabledrun" ]; then
         if ! osc service disabledrun; then
             die "disabledrun failed"
+        fi
+    fi
+
+    if [ -n "$command" ]; then
+        if ! $command; then
+            die "$command failed"
         fi
     fi
 
