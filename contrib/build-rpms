@@ -147,7 +147,7 @@ switch_source_service_url () {
     local BS_pkg_dir="$1"
 
     if ! src_dir=$( source-dir-for "$BS_pkg_dir" ); then
-        die "Running source-dir-for $BS_pkg_dir failed; aborting."
+        die "Running source-dir-for $BS_pkg_dir failed"
     fi
 
     url="file://$src_dir"
@@ -185,7 +185,7 @@ build_rpm () {
     local BS_pkg_dir="$1"
 
     if [ ! -d "$BS_pkg_dir" ]; then
-        die "$BS_pkg_dir does not exist; aborting."
+        die "$BS_pkg_dir does not exist"
     fi
 
     cd $BS_pkg_dir
@@ -196,7 +196,7 @@ build_rpm () {
 
     if [ -n "$disabledrun" ]; then
         if ! osc service disabledrun; then
-            die "disabledrun failed; aborting."
+            die "disabledrun failed"
         fi
     fi
 
@@ -211,7 +211,7 @@ build_rpm () {
     find "$rpm_out_dir" -name \*.rpm | xargs -r rm
 
     if ! osc build -k "$rpm_out_dir" $offline $repository $arch; then
-        die "osc build failed; aborting."
+        die "osc build failed"
     fi
 
     echo "rpms saved in $rpm_out_dir"
