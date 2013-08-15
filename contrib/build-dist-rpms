@@ -1,0 +1,166 @@
+#!/bin/bash
+#
+# Wrapper around 'build-rpms' and 'dist-rpms' to automate the whole
+# process of building packages, distributing them to a test machine,
+# and installing them.
+
+me=`basename $0`
+
+usage () {
+    # Call as: usage [EXITCODE] [USAGE MESSAGE]
+    exit_code=1
+    if [[ "$1" == [0-9] ]]; then
+        exit_code="$1"
+        shift
+    fi
+    if [ -n "$1" ]; then
+        echo "$*" >&2
+        echo
+    fi
+
+    cat <<EOF >&2
+Usage: $me OPTIONS BSDIR [BSDIR ...]
+
+Each BSDIR is a check-out of a package from a Build Service instance.
+
+Options:
+  -o, --offline          Run \`osc build' with -o option
+  -c, --command=COMMAND  Run COMMAND before build
+  -d, --disabledrun      Run \`osc service disabledrun' before build
+  -l, --local-source     Switch tar_scm source service URL to file://SRCDIR
+                         as returned by 'source-dir-for BSDIR'.  Implies -d
+                         unless -c is also specified.
+  -r, --revision=REV     Switch tar_scm source service revision to REV.
+                         Implies -d unless -c is also specified.
+  -t, --hosts=HOSTS      List of target hosts separated by commas or spaces
+  -p, --proxy=PROXY      ssh/scp to target hosts via PROXY
+  -R, --repository=REPO  Build for repository REPO
+  -a, --arch=ARCH        Build for arch ARCH
+  -h, --help             Show this help and exit
+EOF
+    exit "$exit_code"
+}
+
+parse_opts () {
+    command=( )
+    disabledrun=
+    offline=
+    target_hosts=( )
+    proxy_opts=( )
+    revision=
+
+    while [ -n "$1" ]; do
+        case "$1" in
+            -h|--help)
+                usage 0
+                ;;
+            -t|--hosts)
+                [ -n "$2" ] || usage "-t requires a value."
+                OLD_IFS="$IFS"
+                IFS=", "
+                target_hosts=( "$2" )
+                IFS="$OLD_IFS"
+                shift 2
+                ;;
+            -o|--offline)
+                offline=-o
+                shift
+                ;;
+            -c|--command)
+                command=( -c "$2" )
+                shift 2
+                ;;
+            -d|--disabledrun)
+                disabledrun=-d
+                shift
+                ;;
+            -l|--local-source)
+                local_source=-l
+                # -d is automatically implied by build-rpms when appropriate
+                shift
+                ;;
+            -r|--revision)
+                revision="-r $2"
+                # -d is automatically implied by build-rpms when appropriate
+                shift 2
+                ;;
+            -p)
+                [ -n "$2" ] || usage "-p requires a value."
+                proxy_opts=(-p "$2" )
+                shift 2
+                ;;
+            -R|--repository)
+                repository="-r $2"
+                shift 2
+                ;;
+            -a|--arch)
+                arch="-a $2"
+                shift 2
+                ;;
+            *)
+                break
+                ;;
+        esac
+    done
+
+    if [ "${#target_hosts[@]}" = 0 ]; then
+        usage "You must specify at least one target host via -t."
+    fi
+
+    if [ $# = 0 ]; then
+        usage "You must specify at least one rpm to build."
+    fi
+
+    if [ -n "$arch" ] && [ -z "$repository" ]; then
+        usage "Cannot specify arch without repository."
+    fi
+
+    args=( "$@" )
+}
+
+speak () {
+    text=$( echo "$*" | sed 's/rubygem/ruby gem/; s/[^a-z0-9]\+/ /g' )
+    espeak "$text" 2>/dev/null
+}
+
+main () {
+    parse_opts "$@"
+
+    first=yes
+
+    for bs_dir in "${args[@]}"; do
+        rpm="${bs_dir##*/}"
+
+        if [ -z "$first" ]; then
+            div
+        else
+            first=
+        fi
+
+        echo "Building $rpm from local source ..."
+
+        if build-rpms \
+            $repository $arch "${command[@]}" $disabledrun \
+            $local_source $revision $offline "$bs_dir"; then
+            speak "built $rpm" &
+        else
+            speak "build failed for $rpm" &
+            echo "Failed to build $rpm; aborting." >&2
+            exit 1
+        fi
+
+        div
+
+        d="${bs_dir#$HOME/}"
+        rpm_out_dir="$HOME/tmp/build-rpms/${d//\//_}"
+        if dist-rpms -d "$rpm_out_dir" -i ${proxy_opts[@]} "${target_hosts[@]}"; then
+            speak "installed $rpm" &
+        else
+            speak "install failed for $rpm" &
+            echo "Failed to install $rpm on ${target_hosts[@]}; aborting." >&2
+            exit 1
+        fi
+    done
+}
+
+main "$@"
