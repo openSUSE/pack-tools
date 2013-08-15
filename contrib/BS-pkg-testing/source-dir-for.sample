@@ -1,0 +1,81 @@
+#!/bin/bash
+#
+# Simple script which maps the path of a locally checked out Build
+# Service working directory to a local checkout of the sources
+# corresponding to that package.
+#
+# So for example, running:
+#
+#   source-dir-for ~/IBS/Devel/Cloud/2.0/crowbar
+#
+# would output:
+#
+#   /home/adam/SUSE/cloud/crowbar/git/1.6
+#
+# This is used by build-dist-rpms in order to automatically point
+# the tar_scm section of a package's _service file at a local copy
+# of the source repository.
+
+bs_pkg_path="$1"
+
+if ! [ -d "$bs_pkg_path" ]; then
+    echo "$bs_pkg_path does not exist" >&2
+    exit 1
+fi
+
+bs_pkg_path=$( cd "$bs_pkg_path" && pwd -P )
+
+die () {
+    echo >&2 "$*"
+    exit 1
+}
+
+get_crowbar_dir () {
+    path="$1"
+    case "$path" in
+        *Devel/Cloud|*Devel/Cloud/1.0*)
+            crowbar_dir=$HOME/SUSE/cloud/crowbar/git/1.5
+            ;;
+        *Devel/Cloud/2.0*)
+            crowbar_dir=$HOME/SUSE/cloud/crowbar/git/1.6
+            ;;
+        *systemsmanagement/crowbar/2.0*)
+            crowbar_dir=$HOME/SUSE/cloud/crowbar/git/2.0
+            ;;
+        *)
+            die "Couldn't figure out Crowbar version for $path"
+            ;;
+    esac
+}
+
+bs_pkg="${bs_pkg_path##*/}"
+bs_project_dir="${bs_pkg_path%/*}"
+
+case "$bs_pkg" in
+    crowbar)
+        get_crowbar_dir "$bs_project_dir" 
+        src_dir="$crowbar_dir"
+        ;;
+    crowbar-barclamp-*)
+        get_crowbar_dir "$bs_project_dir" 
+        src_dir="$crowbar_dir/barclamps/${bs_pkg#crowbar-barclamp-}"
+        ;;
+    rubygem-ohai)
+        src_dir="$HOME/SUSE/cloud/chef/${bs_pkg#rubygem-}"
+        ;;
+    rubygem-chef*)
+        src_dir="$HOME/SUSE/cloud/chef/git/chef"
+        ;;
+    supportutils-plugin-susecloud)
+        src_dir="$HOME/SUSE/cloud/git/$bs_pkg"
+        ;;
+    *)
+        die "Didn't recognise $bs_pkg_path"
+        ;;
+esac
+
+if [ -d "$src_dir" ]; then
+    echo "$src_dir"
+else
+    die "Couldn't find source dir at $src_dir"
+fi
