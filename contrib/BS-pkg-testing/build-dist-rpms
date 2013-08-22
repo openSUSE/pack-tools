@@ -123,12 +123,19 @@ speak () {
     espeak "$text" 2>/dev/null
 }
 
+die () {
+    echo >&2 "$*"
+    exit 1
+}
+
 main () {
     parse_opts "$@"
 
     first=yes
 
     for bs_dir in "${args[@]}"; do
+        bs_dir=$( cd "$bs_dir" && pwd ) || die "Invalid directory $bs_dir"
+
         rpm="${bs_dir##*/}"
 
         if [ -z "$first" ]; then
