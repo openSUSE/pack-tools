@@ -227,8 +227,9 @@ build_rpm () {
     mkdir -p "$rpm_out_dir"
     find "$rpm_out_dir" -name \*.rpm | xargs -r rm
 
-    echo "osc build -k \"$rpm_out_dir\" $offline $repository $arch"
-    if ! osc build -k "$rpm_out_dir" $offline $repository $arch; then
+    echo "osc build --no-service -k \"$rpm_out_dir\" $offline $repository $arch"
+    
+    if ! osc build --no-service -k "$rpm_out_dir" $offline $repository $arch; then
         die "osc build failed"
     fi
 
