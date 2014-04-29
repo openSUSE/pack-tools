@@ -90,7 +90,7 @@ parse_opts () {
                 shift 2
                 ;;
             -R|--repository)
-                repository="-r $2"
+                repository="-R $2"
                 shift 2
                 ;;
             -a|--arch)
