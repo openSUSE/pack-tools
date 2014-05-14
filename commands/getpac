@@ -295,6 +295,10 @@ function suse
 		then
 			project_name="`sed  -e 's/^Project //' -e 's/ created.$//' $_suse_mbranch`"
 
+		elif grep -q 'osc -A https://api.suse.de' $_suse_mbranch
+		then
+			project_name="`grep 'osc -A https://api.suse.de' $_suse_mbranch | sed -e 's#^osc -A https://api.suse.de co ##'`"
+
 		else
 			echo "ERROR: unknown"
 			return 1
