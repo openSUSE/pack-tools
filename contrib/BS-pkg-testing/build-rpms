@@ -130,6 +130,13 @@ tweak_source_service () {
     fi
     cp "$src_svc" "$src_svc_temp"
 
+    if [ -e "$svc_data" ]; then
+        if ! svc_data_temp=$( mktemp "${src_svc}.build-rpms.XXXXXXXX" ); then
+            die "Couldn't make temporary backup of $svc_data"
+        fi
+        cp "$src_svc" "$src_svc_temp"
+    fi
+
     if [ -n "$local_source" ]; then
         if ! switch_source_service_url "$BS_pkg_dir"; then
             die "Failed to switch source service for $BS_pkg_dir"
@@ -146,6 +153,7 @@ tweak_source_service () {
 find_source_service_for_package () {
     local BS_pkg_dir="$1"
     src_svc="$BS_pkg_dir/_service"
+    svc_data="$BS_pkg_dir/_servicedata"
 
     if ! [ -e "$src_svc" ]; then
         return 1
@@ -163,6 +171,7 @@ switch_source_service_url () {
 
     url="file://$src_dir"
     tweak_param_value "url" "$url"
+    tweak_param_value "url" "$url" "$svc_data"
 }
 
 switch_source_service_revision () {
@@ -171,12 +180,13 @@ switch_source_service_revision () {
 }
 
 tweak_param_value () {
-    local param="$1" new_value="$2"
+    local param="$1" new_value="$2" file="${3:-$src_svc}"
 
+    echo "tweak_param_value for $file:"
     perl -Mstrict -wlni -e '
       my $param = q{'"$param"'};
+      my $new_value = q{'"$new_value"'};
       if (m!(\s*<param name="'"$param"'">)(.+)(</param>)!) {
-          my $new_value = q{'"$new_value"'};
           my $old_value = $2;
           if ($old_value ne $new_value) {
               print "$1$new_value$3";
@@ -189,7 +199,7 @@ tweak_param_value () {
       }
       else {
         print
-      }' "$src_svc"
+      }' "$file"
 }
 
 build_rpm () {
@@ -220,6 +230,9 @@ build_rpm () {
     if [ -e "$src_svc_temp" ]; then
         mv "$src_svc_temp" "$src_svc"
     fi
+    if [ -e "$svc_data_temp" ]; then
+        mv "$svc_data_temp" "$svc_data"
+    fi
 
     d="${BS_pkg_dir#$HOME/}"
     rpm_out_dir="$HOME/tmp/build-rpms/${d//\//_}"
@@ -228,7 +241,7 @@ build_rpm () {
     find "$rpm_out_dir" -name \*.rpm | xargs -r rm
 
     echo "osc build --no-service -k \"$rpm_out_dir\" $offline $repository $arch"
-    
+
     if ! osc build --no-service -k "$rpm_out_dir" $offline $repository $arch; then
         die "osc build failed"
     fi
