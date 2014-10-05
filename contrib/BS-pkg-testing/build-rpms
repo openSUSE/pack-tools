@@ -134,7 +134,7 @@ tweak_source_service () {
         if ! svc_data_temp=$( mktemp "${src_svc}.build-rpms.XXXXXXXX" ); then
             die "Couldn't make temporary backup of $svc_data"
         fi
-        cp "$src_svc" "$src_svc_temp"
+        cp "$svc_data" "$svc_data_temp"
     fi
 
     if [ -n "$local_source" ]; then
