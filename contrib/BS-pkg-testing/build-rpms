@@ -125,17 +125,7 @@ tweak_source_service () {
         return 1
     fi
 
-    if ! src_svc_temp=$( mktemp "${src_svc}.build-rpms.XXXXXXXX" ); then
-        die "Couldn't make temporary backup of $src_svc"
-    fi
-    cp "$src_svc" "$src_svc_temp"
-
-    if [ -e "$svc_data" ]; then
-        if ! svc_data_temp=$( mktemp "${src_svc}.build-rpms.XXXXXXXX" ); then
-            die "Couldn't make temporary backup of $svc_data"
-        fi
-        cp "$svc_data" "$svc_data_temp"
-    fi
+    backup_service_files
 
     if [ -n "$local_source" ]; then
         if ! switch_source_service_url "$BS_pkg_dir"; then
@@ -160,6 +150,20 @@ find_source_service_for_package () {
     fi
 
     return 0
+}
+
+backup_service_files () {
+    if ! src_svc_temp=$( mktemp "${src_svc}.build-rpms.XXXXXXXX" ); then
+        die "Couldn't make temporary backup of $src_svc"
+    fi
+    cp "$src_svc" "$src_svc_temp"
+
+    if [ -e "$svc_data" ]; then
+        if ! svc_data_temp=$( mktemp "${src_svc}.build-rpms.XXXXXXXX" ); then
+            die "Couldn't make temporary backup of $svc_data"
+        fi
+        cp "$svc_data" "$svc_data_temp"
+    fi
 }
 
 switch_source_service_url () {
