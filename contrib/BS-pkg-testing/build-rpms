@@ -231,6 +231,10 @@ build_rpm () {
         fi
     fi
 
+    restore_service_files
+}
+
+restore_service_files () {
     if [ -e "$src_svc_temp" ]; then
         mv "$src_svc_temp" "$src_svc"
     fi
