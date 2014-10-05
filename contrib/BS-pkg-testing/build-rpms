@@ -206,15 +206,7 @@ tweak_param_value () {
       }' "$file"
 }
 
-build_rpm () {
-    local BS_pkg_dir="$1"
-
-    if [ ! -d "$BS_pkg_dir" ]; then
-        die "$BS_pkg_dir does not exist"
-    fi
-
-    cd $BS_pkg_dir
-
+run_source_services () {
     if [ -n "$local_source" -o -n "$revision" ]; then
         tweak_source_service "$BS_pkg_dir"
     fi
@@ -241,6 +233,18 @@ restore_service_files () {
     if [ -e "$svc_data_temp" ]; then
         mv "$svc_data_temp" "$svc_data"
     fi
+}
+
+build_rpm () {
+    local BS_pkg_dir="$1"
+
+    if [ ! -d "$BS_pkg_dir" ]; then
+        die "$BS_pkg_dir does not exist"
+    fi
+
+    cd $BS_pkg_dir
+
+    run_source_services
 
     d="${BS_pkg_dir#$HOME/}"
     rpm_out_dir="$HOME/tmp/build-rpms/${d//\//_}"
