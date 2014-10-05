@@ -182,7 +182,7 @@ switch_source_service_revision () {
 tweak_param_value () {
     local param="$1" new_value="$2" file="${3:-$src_svc}"
 
-    echo "tweak_param_value for $file:"
+    echo "tweak_param_value for ${file/$HOME/~}:"
     perl -Mstrict -wlni -e '
       my $param = q{'"$param"'};
       my $new_value = q{'"$new_value"'};
