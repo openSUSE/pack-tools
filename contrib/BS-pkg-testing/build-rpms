@@ -115,14 +115,7 @@ tweak_source_service () {
     local BS_pkg_dir="$1"
 
     if ! find_source_service_for_package "$BS_pkg_dir"; then
-        echo "Couldn't find source service at $src_svc"
-        if [ -n "$local_source" ]; then
-            echo "  ignoring -l for $BS_pkg_dir"
-        fi
-        if [ -n "$revision" ]; then
-            echo "  ignoring -r for $BS_pkg_dir"
-        fi
-        return 1
+        die "Couldn't find source service at $src_svc"
     fi
 
     backup_service_files
