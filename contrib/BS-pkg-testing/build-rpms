@@ -4,12 +4,8 @@
 # repository/arch combination) from their package's working
 # directories locally checked out from a Build Service.
 #
-# Optionally switches the source service URL to consume local sources.
-# To enable this feature, you should ensure that an executable called
-# 'source-dir-for' is on your $PATH, which accepts a Build Service
-# working directory as the only parameter, and outputs the absolute
-# path of the corresponding locally checked out source repository,
-# which can then be consumed by the tar_scm source service.
+# Optionally runs the associated source services via
+# 'run-source-services'.
 
 me=`basename $0`
 
@@ -28,7 +24,7 @@ usage () {
     cat <<EOF >&2
 Usage: $me [options] BSDIR [BSDIR ...]
 Options:
-  -c, --command=COMMAND  Run COMMAND before build
+  -c, --command=COMMAND  Run COMMAND instead of \`osc service disabledrun'
   -d, --disabledrun      Run \`osc service disabledrun' before build
   -l, --local-source     Switch tar_scm source service url to file://SRCDIR
                          as returned by 'source-dir-for BSDIR'.  Implies -d
@@ -44,11 +40,11 @@ EOF
 }
 
 parse_opts () {
-    command=
+    command=()
     disabledrun=
     local_source=
     offline=
-    revision=
+    revision=()
 
     while [ -n "$1" ]; do
         case "$1" in
@@ -60,19 +56,19 @@ parse_opts () {
                 shift
                 ;;
             -c|--command)
-                command="$2"
+                command=(-c "$2")
                 shift 2
                 ;;
             -d|--disabledrun)
-                disabledrun=y
+                disabledrun=-d
                 shift
                 ;;
             -l|--local-source)
-                local_source=y
+                local_source=-l
                 shift
                 ;;
             -r|--revision)
-                revision="$2"
+                revision=(-r "$2")
                 shift 2
                 ;;
             -R|--repository)
@@ -99,7 +95,7 @@ parse_opts () {
 
     if [ -z "$command" ]; then
         if [ -n "$local_source" ] || [ -n "$revision" ]; then
-            disabledrun=y
+            disabledrun=-d
         fi
     fi
 
@@ -111,123 +107,6 @@ die () {
     exit 1
 }
 
-tweak_source_service () {
-    local BS_pkg_dir="$1"
-
-    if ! find_source_service_for_package "$BS_pkg_dir"; then
-        die "Couldn't find source service at $src_svc"
-    fi
-
-    backup_service_files
-
-    if [ -n "$local_source" ]; then
-        if ! switch_source_service_url "$BS_pkg_dir"; then
-            die "Failed to switch source service for $BS_pkg_dir"
-        fi
-    fi
-
-    if [ -n "$revision" ]; then
-        if ! switch_source_service_revision "$BS_pkg_dir"; then
-            die "Failed to switch source service for $BS_pkg_dir"
-        fi
-    fi
-}
-
-find_source_service_for_package () {
-    local BS_pkg_dir="$1"
-    src_svc="$BS_pkg_dir/_service"
-    svc_data="$BS_pkg_dir/_servicedata"
-
-    if ! [ -e "$src_svc" ]; then
-        return 1
-    fi
-
-    return 0
-}
-
-backup_service_files () {
-    if ! src_svc_temp=$( mktemp "${src_svc}.build-rpms.XXXXXXXX" ); then
-        die "Couldn't make temporary backup of $src_svc"
-    fi
-    cp "$src_svc" "$src_svc_temp"
-
-    if [ -e "$svc_data" ]; then
-        if ! svc_data_temp=$( mktemp "${src_svc}.build-rpms.XXXXXXXX" ); then
-            die "Couldn't make temporary backup of $svc_data"
-        fi
-        cp "$svc_data" "$svc_data_temp"
-    fi
-}
-
-switch_source_service_url () {
-    local BS_pkg_dir="$1"
-
-    if ! src_dir=$( source-dir-for "$BS_pkg_dir" ); then
-        die "Running source-dir-for $BS_pkg_dir failed"
-    fi
-
-    url="file://$src_dir"
-    tweak_param_value "url" "$url"
-    tweak_param_value "url" "$url" "$svc_data"
-}
-
-switch_source_service_revision () {
-    local BS_pkg_dir="$1"
-    tweak_param_value "revision" "$revision"
-}
-
-tweak_param_value () {
-    local param="$1" new_value="$2" file="${3:-$src_svc}"
-
-    echo "tweak_param_value for ${file/$HOME/~}:"
-    perl -Mstrict -wlni -e '
-      my $param = q{'"$param"'};
-      my $new_value = q{'"$new_value"'};
-      if (m!(\s*<param name="'"$param"'">)(.+)(</param>)!) {
-          my $old_value = $2;
-          if ($old_value ne $new_value) {
-              print "$1$new_value$3";
-              print STDERR "Switched $param from $old_value to $new_value";
-          }
-          else {
-              print;
-              print STDERR "$param is set to: $old_value";
-          }
-      }
-      else {
-        print
-      }' "$file"
-}
-
-run_source_services () {
-    if [ -n "$local_source" -o -n "$revision" ]; then
-        tweak_source_service "$BS_pkg_dir"
-    fi
-
-    if [ -n "$disabledrun" ]; then
-        if ! osc service disabledrun; then
-            die "disabledrun failed"
-        fi
-    fi
-
-    if [ -n "$command" ]; then
-        if ! $command; then
-            die "$command failed"
-        fi
-    fi
-
-    restore_service_files
-}
-
-restore_service_files () {
-    if [ -e "$src_svc_temp" ]; then
-        mv "$src_svc_temp" "$src_svc"
-    fi
-    if [ -e "$svc_data_temp" ]; then
-        mv "$svc_data_temp" "$svc_data"
-    fi
-}
-
 build_rpm () {
     local BS_pkg_dir="$1"
 
@@ -237,7 +116,14 @@ build_rpm () {
 
     cd $BS_pkg_dir
 
-    run_source_services
+    if [ -n "$disabledrun" ]; then
+        if ! run-source-services \
+            "${command[@]}" $disabledrun $local_source "${revision[@]}" \
+            "$BS_pkg_dir"
+        then
+            exit $?
+        fi
+    fi
 
     d="${BS_pkg_dir#$HOME/}"
     rpm_out_dir="$HOME/tmp/build-rpms/${d//\//_}"
