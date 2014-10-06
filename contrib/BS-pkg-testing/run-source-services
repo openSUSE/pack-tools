@@ -81,7 +81,9 @@ parse_opts () {
     if [ -z "$command" ]; then
         if [ -n "$local_source" ] || [ -n "$revision" ]; then
             disabledrun=y
-        else
+        fi
+
+        if [ -z "$disabledrun" ]; then
             usage "You must choose at least one of: -c, -d, -l, -r"
         fi
     fi
