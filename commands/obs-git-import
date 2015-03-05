@@ -8,7 +8,7 @@
 
 # Note: bsgit is another tool with similar (perhaps wider) goals.  See:
 #
-#   https://www.gitorious.org/opensuse/bsgit/
+#   https://github.com/openSUSE/bsgit
 
 usage ()
 {
