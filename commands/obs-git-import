@@ -9,13 +9,15 @@
 
 usage ()
 {
-  echo "Usage: `basename $0` [-b <branch>] | \\"
-  echo "       git fast-import --date-format=rfc2822 GIT_DIR=<target>"
-  echo ""
-  echo "Checks in each OBS revision into given branch (defaults to master),"
-  echo "using the OBS commit comment as the commit message, and mapping the"
-  echo "OBS user's email to the git author. Expects a valid OBS project in"
-  echo "the current directory."
+    cat <<EOF
+Usage: `basename $0` [-b <branch>] | \\
+       git fast-import --date-format=rfc2822 GIT_DIR=<target>
+
+Checks in each OBS revision into given branch (defaults to master),
+using the OBS commit comment as the commit message, and mapping the
+OBS user's email to the git author. Expects a valid OBS project in
+the current directory.
+EOF
 }
 
 declare -A committer_map
