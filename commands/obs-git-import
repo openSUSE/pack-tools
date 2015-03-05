@@ -1,0 +1,87 @@
+#!/bin/bash
+
+# Hacked up by tbehrens@suse.com
+# License: BSD-3-Clause
+
+# usage: cd into OBS project, then:
+# obs-git-import | git fast-import --date-format=rfc2822 GIT_DIR=<target_repo>
+#
+
+usage ()
+{
+  echo "Usage: `basename $0` [-b <branch>] | \\"
+  echo "       git fast-import --date-format=rfc2822 GIT_DIR=<target>"
+  echo ""
+  echo "Checks in each OBS revision into given branch (defaults to master),"
+  echo "using the OBS commit comment as the commit message, and mapping the"
+  echo "OBS user's email to the git author. Expects a valid OBS project in"
+  echo "the current directory."
+}
+
+declare -A committer_map
+branch=master
+
+# Parse command line options
+while getopts b:h opt ; do
+    case "$opt" in
+        b) branch=$OPTARG ;;
+        h) usage; exit ;;
+        ?) usage; exit ;;
+    esac
+done
+
+# extract project info
+name=$(osc info | sed -n -e '/^Project/ s/.*: \(.*\)/\1/p')
+pkg_name=$(osc info | sed -n -e '/^Package/ s/.*: \(.*\)/\1/p')
+api_url=$(osc info | sed -n -e '/^API/ s/.*: \(.*\)/\1/p')
+
+# require explicit 'done' command
+echo "option done"
+
+last_mark=''
+osc log --csv | tac | while IFS="|" read -r mark user date hash version comment
+do
+  # find committer
+  if [ -z "${committer_map[$user]}" ]; then
+    email=$(osc whois $user | sed -e ' s/.*: \(.*\)/\1/')
+    committer_map["$user"]="$email"
+  fi
+
+  # checkout given revision
+  spew=$(osc -A "$api_url" checkout --revision "$mark" "$name" "$pkg_name" 2>&1) || {
+    rm -rf ./${name} > /dev/null 2>&1
+    echo "osc checkout failed with $spew (exit: $?)" >&2
+    exit 1
+  }
+
+  # commit info & message
+  echo "commit refs/heads/${branch}"
+  echo "mark :$mark"
+  echo "committer ${committer_map[$user]} $date"
+  echo "data <<EOF"
+  # osc escapes linefeeds
+  echo -e "$comment"
+  echo "EOF"
+  if [ -n "$last_mark" ]; then
+    echo "from :$last_mark"
+  fi
+  echo "deleteall"
+
+  # stick in all files
+  for cur in ./${name}/${pkg_name}/*; do
+    mode=$(stat --format='%a' $cur)
+    echo "M $mode inline `basename $cur`"
+    size=$(stat --format='%s' $cur)
+    echo "data $size"
+    cat $cur
+  done
+
+  spew=$(rm -rf ./${name} 2>&1) || {
+    echo "Cannot rm temp checkout: $spew (exit: $?)" >&2
+    exit 1
+  }
+  echo "Imported commit '$comment'" >&2
+  last_mark=$mark
+done
+
+echo "done"
