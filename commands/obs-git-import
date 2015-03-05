@@ -5,7 +5,10 @@
 
 # usage: cd into OBS project, then:
 # obs-git-import | git fast-import --date-format=rfc2822 GIT_DIR=<target_repo>
+
+# Note: bsgit is another tool with similar (perhaps wider) goals.  See:
 #
+#   https://www.gitorious.org/opensuse/bsgit/
 
 usage ()
 {
