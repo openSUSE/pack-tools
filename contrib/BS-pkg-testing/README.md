@@ -45,8 +45,8 @@ does the following:
 
 First download and install to somewhere on `$PATH`, e.g.
 
-    git clone https://git.gitorious.org/~aspiers/opensuse/aspiers-pack-tools.git
-    cp aspiers-pack-tools/contrib/BS-pkg-testing/* ~/bin
+    git clone https://github.com/openSUSE/pack-tools.git
+    cp pack-tools/contrib/BS-pkg-testing/* ~/bin
     mv ~/bin/source-dir-for.sample ~/bin/source-dir-for
 
 Now adjust the config script to where you've checked out your OBS / IBS
