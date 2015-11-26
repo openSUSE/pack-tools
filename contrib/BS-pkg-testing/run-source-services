@@ -13,6 +13,8 @@
 
 me=`basename $0`
 
+TAR_SCMS_XPATH="//service[@name='tar_scm']"
+
 usage () {
     # Call as: usage [EXITCODE] [USAGE MESSAGE]
     exit_code=1
@@ -105,14 +107,21 @@ tweak_source_service () {
 
     backup_service_files
 
+    local orig_url=$(
+        get_tar_scm_param_value \
+            "filename" "${BS_pkg_dir##*/}" \
+            "url" "$src_svc"
+    )
+    echo "Original URL: $orig_url"
+
     if [ -n "$local_source" ]; then
-        if ! switch_source_service_url "$BS_pkg_dir"; then
+        if ! switch_source_service_url "$BS_pkg_dir" "$orig_url"; then
             die "Failed to switch source service for $BS_pkg_dir"
         fi
     fi
 
     if [ -n "$revision" ]; then
-        if ! switch_source_service_revision "$BS_pkg_dir"; then
+        if ! switch_source_service_revision "$BS_pkg_dir" "$revision"; then
             die "Failed to switch source service for $BS_pkg_dir"
         fi
     fi
@@ -145,7 +154,7 @@ backup_service_files () {
 }
 
 switch_source_service_url () {
-    local BS_pkg_dir="$1"
+    local BS_pkg_dir="$1" orig_url="$2"
 
     if ! which source-dir-for >/dev/null 2>&1; then
         die "Couldn't find source-dir-for on \$PATH.  This is required in order
@@ -159,36 +168,58 @@ in the README which accompanies this utility."
     fi
 
     url="file://$src_dir"
-    tweak_param_value "url" "$url"
-    tweak_param_value "url" "$url" "$svc_data"
+
+    set_param_value "url" "$orig_url" "url" "$url" "$src_svc"
+    set_param_value "url" "$orig_url" "url" "$url" "$svc_data"
 }
 
 switch_source_service_revision () {
-    local BS_pkg_dir="$1"
-    tweak_param_value "revision" "$revision"
+    local BS_pkg_dir="$1" revision="$2"
+    set_param_value "filename" "${BS_pkg_dir##*/}" "revision" "$revision"
 }
 
-tweak_param_value () {
-    local param="$1" new_value="$2" file="${3:-$src_svc}"
+calc_matching_param_xpath () {
+    # Search for <service name="tar_scm"> which has specific
+    # <param name="...">value</param>
+    tar_scm_xpath="${TAR_SCMS_XPATH}[param[@name='$match_param']/text()[.='$match_val']]"
 
-    echo "tweak_param_value for ${file/$HOME/~}:"
-    perl -Mstrict -wlni -e '
-      my $param = q{'"$param"'};
-      my $new_value = q{'"$new_value"'};
-      if (m!(\s*<param name="'"$param"'">)(.+)(</param>)!) {
-          my $old_value = $2;
-          if ($old_value ne $new_value) {
-              print "$1$new_value$3";
-              print STDERR "Switched $param from $old_value to $new_value";
-          }
-          else {
-              print;
-              print STDERR "$param is set to: $old_value";
-          }
-      }
-      else {
-        print
-      }' "$file"
+    # Now extract the required param from that
+    param_xpath="$tar_scm_xpath/param[@name='$param']"
+}
+
+get_tar_scm_param_value () {
+    local match_param="$1" match_val="$2"
+    local param="$3"
+    local file="${4:-$src_svc}"
+
+    calc_matching_param_xpath
+
+    xml sel --template --copy-of "$param_xpath/text()" --nl "$file"
+}
+
+set_param_value () {
+    local match_param="$1" match_val="$2"
+    local param="$3" new_value="$4"
+    local file="${5:-$src_svc}"
+
+    old_value=$(
+        get_tar_scm_param_value "$match_param" "$match_val" "$param" "$file"
+    )
+
+    if [ -z "$old_value" ]; then
+        die "Couldn't find <param name=\"$match_param\">$match_val</param> in $file"
+    fi
+
+    cat <<EOF
+
+Setting '$param' parameter in ${file//$HOME/~}
+  for <service name="tar_scm"> containing <param name="$match_param">$match_val</param>
+    old: $old_value
+    new: $new_value
+EOF
+
+    calc_matching_param_xpath
+    xml edit --inplace --update "$param_xpath" --value "$new_value" "$file"
 }
 
 run_source_services () {
