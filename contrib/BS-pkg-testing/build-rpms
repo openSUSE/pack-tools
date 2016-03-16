@@ -121,7 +121,7 @@ build_rpm () {
             "${command[@]}" $disabledrun $local_source "${revision[@]}" \
             "$BS_pkg_dir"
         then
-            exit $?
+            exit 1
         fi
     fi
 
